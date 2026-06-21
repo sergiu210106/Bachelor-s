@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Generated datasets & run artifacts (regenerable; some may contain scrubbed-but-sensitive data)
+data/
+runs/
+results/
+*.jsonl
+
+# Models / large weights — never commit
+models/
+*.safetensors
+*.gguf
+*.bin
+
+# Local config / secrets
+.env
+*.local

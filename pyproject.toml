@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "logsub"
+version = "0.1.0"
+description = "Log-substrate prompt injection testbed against local-LLM SOC copilots (bachelor's thesis)"
+authors = [{ name = "Sergiu-Florian Tuduce" }]
+requires-python = ">=3.10"
+readme = "README.md"
+dependencies = [
+    "pydantic>=2.6",
+]
+
+[project.optional-dependencies]
+# Black-box copilot + eval (laptop). Model-backed phases pull these in later.
+copilot = [
+    "langchain>=0.2",
+    "langchain-community>=0.2",
+    "chromadb>=0.5",
+    "ollama>=0.3",
+]
+# Grey/white-box attack arm — GPU, run on Colab / uni server.
+whitebox = [
+    "torch>=2.2",
+    "transformers>=4.40",
+    "accelerate>=0.30",
+]
+stats = [
+    "scipy>=1.11",
+    "numpy>=1.26",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+logsub = "logsub.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["logsub*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
