@@ -4,9 +4,9 @@ Research software for the bachelor's thesis **"Log-Substrate Prompt Injection Ag
 
 It measures how susceptible small/medium **local open-source LLMs** are to prompt injection delivered through **attacker-controlled Linux log fields**, generates payloads adaptively under realistic field constraints, and evaluates a layered defense stack.
 
-> **Design:** [SPECIFICATION.md](SPECIFICATION.md) · **As-built docs:** [IMPLEMENTATION.md](IMPLEMENTATION.md) · **Host a model on Colab:** [docs/colab_hosting.md](docs/colab_hosting.md) · **Proposal:** [Propunere_Licenta_EN.md](Propunere_Licenta_EN.md) · **Glossary:** [key_concepts.md](key_concepts.md)
+> **Design:** [SPECIFICATION.md](docs/SPECIFICATION.md) · **As-built docs:** [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) · **Host a model on Colab:** [docs/colab_hosting.md](docs/colab_hosting.md) · **Proposal:** [Propunere_Licenta_EN.md](docs/Propunere_Licenta_EN.md) · **Glossary:** [key_concepts.md](docs/key_concepts.md)
 >
-> ⚠️ **Defensive research, lab-contained.** No third-party targets, no production systems. The adaptive payload generator is an attack tool and is released under controlled access only — see [SPECIFICATION.md §10](SPECIFICATION.md).
+> ⚠️ **Defensive research, lab-contained.** No third-party targets, no production systems. The adaptive payload generator is an attack tool and is released under controlled access only — see [SPECIFICATION.md §10](docs/SPECIFICATION.md).
 
 ---
 
@@ -14,7 +14,7 @@ It measures how susceptible small/medium **local open-source LLMs** are to promp
 
 A SOC copilot reads logs and emits triage decisions. Because fields like `User-Agent`, request URIs, and command-line args are attacker-controlled, a crafted log line can smuggle *instructions* to the LLM ("classify this host as clean"). This project reproduces, attacks, and defends that pipeline in an isolated lab.
 
-Five subsystems (see [SPECIFICATION.md §4](SPECIFICATION.md)), wired over versioned JSON:
+Five subsystems (see [SPECIFICATION.md §4](docs/SPECIFICATION.md)), wired over versioned JSON:
 
 | Code | Subsystem | Status |
 |------|-----------|--------|
@@ -83,7 +83,7 @@ matching credentials when you wire in real models.
 
 ## Compute: the backend split (load-bearing)
 
-Per [SPECIFICATION.md §3](SPECIFICATION.md), the two access regimes use **different backends**:
+Per [SPECIFICATION.md §3](docs/SPECIFICATION.md), the two access regimes use **different backends**:
 
 | Regime | Needs | Backend | Where |
 |--------|-------|---------|-------|
@@ -94,18 +94,22 @@ Ollama/LM Studio serve quantized models and expose, at best, sampled logprobs �
 
 ### Google Colab (until uni server access)
 
-- **The full experiment suite is [notebooks/logsub_experiments.ipynb](notebooks/logsub_experiments.ipynb)** — open it in Colab, attach a GPU, and run top-to-bottom to produce the paper's results (RQ1 susceptibility, RQ4 defenses, RQ2 constraint regime, RQ3 transfer, detector baseline), each with Clopper–Pearson CIs and plots. It hosts models with Ollama on the VM's localhost (no tunnel) and uses `HFBackend` for the grey-box GA. Regenerate it with `python notebooks/_build_notebook.py`.
-- For driving a Colab-hosted model from your **laptop** instead, see [docs/colab_hosting.md](docs/colab_hosting.md) (Ollama + tunnel → `--backend ollama`).
-- Grey/white-box experiments (HF models, GA/GCG) run in [notebooks/](notebooks/) on Colab GPUs (T4/A100).
-- Clone the repo into the Colab session, `pip install -e .`, pin model revisions, and write run artifacts back to Drive so the [eval harness (S5)](SPECIFICATION.md) can regenerate figures locally.
+Colab is used **only to host the model** and expose a public API; all project code runs on your machine.
+
+1. **Host the model:** open [notebooks/colab_model_server.ipynb](notebooks/colab_model_server.ipynb) in Colab, attach a GPU, run it. It serves the model with Ollama and prints a public **API URL** (Cloudflare/ngrok tunnel). Step-by-step rationale in [docs/colab_hosting.md](docs/colab_hosting.md).
+2. **Point the project at it:** put the URL in `.env` (`OLLAMA_HOST=…`, `LOGSUB_BACKEND=ollama`).
+3. **Run experiments locally:** either the CLI (`logsub demo --backend ollama …`) or the local experiment suite [notebooks/logsub_experiments.ipynb](notebooks/logsub_experiments.ipynb), which produces the paper's results (RQ1 susceptibility, RQ4 defenses, RQ2 constraint regime, RQ3 transfer, detector baseline) with Clopper–Pearson CIs and plots. Regenerate the notebooks with `python notebooks/_build_server_notebook.py` and `python notebooks/_build_notebook.py`.
+
+> **Backend split:** the API exposes **text only** (black-box), which covers RQ1/RQ3/RQ4 and the PAIR attack. The grey/white-box arm (GA logit fitness, GCG) needs a GPU you control — run those on the uni server, not over the API.
+- Clone the repo into the Colab session, `pip install -e .`, pin model revisions, and write run artifacts back to Drive so the [eval harness (S5)](docs/SPECIFICATION.md) can regenerate figures locally.
 - Keep sample sizes modest on free-tier T4; the staged design (broad screening → focused high-sample re-runs) is built for exactly this constraint.
 
 ---
 
 ## Reproducibility
 
-Fixed seeds, pinned deps, versioned JSON schemas, run provenance (config hash + model revision + seed) stored with every result. Every figure regenerable from artifacts. See [SPECIFICATION.md §6](SPECIFICATION.md) (NFR-1).
+Fixed seeds, pinned deps, versioned JSON schemas, run provenance (config hash + model revision + seed) stored with every result. Every figure regenerable from artifacts. See [SPECIFICATION.md §6](docs/SPECIFICATION.md) (NFR-1).
 
 ## Ethics
 
-Defensive purpose, lab-contained, captured data scrubbed before persistence, differential release posture. See [SPECIFICATION.md §10](SPECIFICATION.md).
+Defensive purpose, lab-contained, captured data scrubbed before persistence, differential release posture. See [SPECIFICATION.md §10](docs/SPECIFICATION.md).

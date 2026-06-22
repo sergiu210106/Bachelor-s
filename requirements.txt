@@ -1,0 +1,27 @@
+# logsub — pinned dependencies for the local (laptop) venv.
+#
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+#   .venv/bin/pip install -e .          # then install the package itself (editable)
+#
+# These are the laptop-runnable deps: running the testbed + tests, talking to a
+# black-box model over the Ollama API, and running notebooks/logsub_experiments.ipynb.
+# The grey/white-box GPU stack (torch/transformers/accelerate) is NOT here — it runs on
+# Colab / the uni server and is installed there via `pip install -e ".[whitebox]"`.
+# Pinned against Python 3.14.
+
+# --- core (always required) ---
+pydantic==2.13.4
+
+# --- black-box model backend (S4): OllamaBackend talks to the Ollama HTTP API ---
+ollama==0.6.2
+
+# --- experiments notebook: tables, plots, and a VS Code / Jupyter kernel ---
+numpy==2.5.0
+pandas==3.0.3
+matplotlib==3.11.0
+ipykernel==7.3.0
+
+# --- dev / tooling ---
+pytest==9.1.1
+ruff==0.15.18
+nbformat==5.10.4

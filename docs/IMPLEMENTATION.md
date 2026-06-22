@@ -1,7 +1,7 @@
 # Implementation Documentation
 
 This documents the code **as built**. It is the companion to [SPECIFICATION.md](SPECIFICATION.md)
-(the design contract) and [README.md](README.md) (quickstart). Where the spec says *what* and
+(the design contract) and [README.md](../README.md) (quickstart). Where the spec says *what* and
 *why*, this says *how the code actually does it* and *how to extend it*.
 
 - **Package:** `logsub` (Python ≥ 3.10, pydantic v2)
@@ -226,7 +226,7 @@ only step 1–5 are replaced by the model's actual behavior.
 .venv/bin/pytest -q
 ```
 
-To target a real model hosted in Colab, see [docs/colab_hosting.md](docs/colab_hosting.md), then run
+To target a real model hosted in Colab, see [colab_hosting.md](colab_hosting.md), then run
 with `--backend ollama` after pointing `OLLAMA_HOST` at the tunnel URL in `.env`.
 
 ---

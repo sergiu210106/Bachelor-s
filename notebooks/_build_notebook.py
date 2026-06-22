@@ -35,51 +35,56 @@ md(r"""
 
 **Bachelor's thesis · Sergiu-Florian Tuduce · BBU/FMI**
 
-This notebook runs the empirical study for *Log-Substrate Prompt Injection Against Local-LLM SOC
-Copilots*. It hosts open-source models on a Colab GPU and drives the `logsub` testbed (S1–S5) to
-produce the paper's results, each tied to a research question:
+**Run this notebook locally, in your repo's venv** — not in Colab. The models are hosted on Colab
+(see `colab_model_server.ipynb`) and reached over their public API URL; the private repo and all
+experiment code stay on your machine.
+
+It drives the `logsub` testbed (S1–S5) to produce the paper's results, each tied to a research
+question:
 
 | Experiment | Research question | What it measures |
 |---|---|---|
 | **A** | **RQ1** susceptibility | ASR across models × attack classes × tasks; is the persona-hijack > direct-override ordering preserved on local models? |
 | **B** | **RQ4** defenses | ASR reduction *and* utility cost of each defense — the honest robustness–utility trade-off |
-| **C** | **RQ2** adaptive attack | how the field-constraint regime (roomy vs tight) changes which arm wins: handwritten vs PAIR (black-box) vs GA (grey-box, logit fitness) |
+| **C** | **RQ2** adaptive attack | how the field-constraint regime (roomy vs tight) changes which arm wins: handwritten vs PAIR (black-box). The GA grey-box arm needs a GPU you control (see note in C). |
 | **D** | **RQ3** transferability | do payloads optimized on model A transfer to B, C? |
 | **E** | detection | a keyword-detector baseline's TPR/FPR — the bar a trained detector must beat |
 
 Every rate is reported with an exact **Clopper–Pearson 95% CI**; differences within CI overlap are
 called inconclusive (see the thesis spec §6). All work is lab-contained and defensive in framing.
 
-> **Backend split (load-bearing).** Black-box experiments (A, B, D, E) use **Ollama** served on this
-> VM's localhost. The grey-box GA fitness in **C** uses **HuggingFace + GPU** (`HFBackend.token_logprob`),
-> which Ollama cannot provide. Because this notebook *is* the runner, no tunnel is needed.
+> **Backend split (load-bearing).** Over the Ollama API you get **text output only** — enough for the
+> black-box experiments A, B, D, E. The grey-box GA fitness in **C** needs model **logits**
+> (`HFBackend.token_logprob`), which the API does not expose; run that arm on a GPU you control (uni
+> server), not against the Colab endpoint.
 """)
 
-md("## 0 · Setup")
+md("## 0 · Setup (local)")
 
 code(r"""
-# Confirm a GPU is attached: Runtime -> Change runtime type -> T4 GPU
-!nvidia-smi -L
+# Run in your repo venv. If pandas/matplotlib are missing, install them into THIS kernel:
+import sys
+# !{sys.executable} -m pip install -q pandas matplotlib
 """)
 
 code(r"""
-# Get the code. Either upload the repo folder, or clone it and cd in.
+# Point at the model you hosted on Colab: paste the API_URL printed by colab_model_server.ipynb.
 import os
-REPO_URL = ""  # e.g. "https://github.com/<you>/bachelors.git" — leave "" if you uploaded the folder
+API_URL = "https://PASTE-THE-COLAB-URL.trycloudflare.com"
+os.environ["OLLAMA_HOST"] = API_URL
+os.environ["LOGSUB_BACKEND"] = "ollama"
 
-if REPO_URL and not os.path.exists("logsub"):
-    !git clone $REPO_URL repo
-    %cd repo
+# Names must match what you pulled in the server notebook.
+MODELS = ["llama3.1:8b"]   # e.g. + "llama3.2:3b", "qwen2.5:7b"
 
-# install the package + experiment extras
-!pip -q install -e ".[whitebox,stats]" pandas matplotlib
-print("installed")
+import urllib.request
+print("reaching", API_URL, "...")
+print(urllib.request.urlopen(API_URL + "/api/version", timeout=15).read().decode())
 """)
 
 code(r"""
-# Imports + a smoke test with the offline MockBackend, so we know the pipeline works
-# before any model is pulled.
-import itertools, math, os, subprocess, time
+# Imports + an offline MockBackend smoke test, so we know the pipeline works before hitting the API.
+import itertools, math
 import numpy as np, pandas as pd, matplotlib.pyplot as plt
 
 from logsub.copilot.backends import MockBackend, OllamaBackend, HFBackend
@@ -105,44 +110,14 @@ print("smoke ASR:", _smoke.asr, "| utility:", _smoke.utility)
 """)
 
 code(r"""
-# (Optional) mount Google Drive to persist result tables across sessions.
+# Result tables are written here (local). Copy them next to the thesis when done.
 RESULTS_DIR = "results"
-try:
-    from google.colab import drive
-    drive.mount("/content/drive")
-    RESULTS_DIR = "/content/drive/MyDrive/logsub-runs"
-except Exception as e:
-    print("Drive not mounted (", e, ") — saving to ./results")
 os.makedirs(RESULTS_DIR, exist_ok=True)
-print("results ->", RESULTS_DIR)
-""")
-
-md("## 1 · Host the models (Ollama, black-box)")
-
-code(r"""
-# Install Ollama and start the server on localhost (this VM talks to it directly).
-!curl -fsSL https://ollama.com/install.sh | sh
-subprocess.Popen(["ollama", "serve"],
-                 env={**os.environ, "OLLAMA_HOST": "127.0.0.1:11434"},
-                 stdout=open("ollama.log", "w"), stderr=subprocess.STDOUT)
-time.sleep(6)
-!curl -s http://localhost:11434/api/version && print()
-os.environ["OLLAMA_HOST"] = "http://localhost:11434"
-os.environ["LOGSUB_BACKEND"] = "ollama"
-""")
-
-code(r"""
-# Models for the cross-model study. Start with two (a small + an 8B) to keep runs quick;
-# add more for the full RQ1 sweep. Different families matter for the susceptibility comparison.
-MODELS = ["llama3.2:3b", "llama3.1:8b"]   # e.g. + "qwen2.5:7b", "mistral:7b", "gemma2:9b"
-for m in MODELS:
-    print("pulling", m, "...")
-    !ollama pull {m}
-print("ready:", MODELS)
+print("results ->", os.path.abspath(RESULTS_DIR))
 """)
 
 md("""
-## 2 · Experiment helpers
+## 1 · Experiment helpers
 
 Thin wrappers over the harness so each experiment below is a few readable lines. `run_cell` runs one
 grid cell (an attack pass + a utility pass) and returns ASR/utility with CIs; `res_to_row` flattens it
@@ -288,9 +263,11 @@ The central methodological experiment. Compare the arms as the **field constrain
 | `uri` (nginx) | URL (no spaces) | medium — prose blocked |
 | `user` (ssh) | username, ≤32 chars | tight — the optimizer's regime |
 
-Arms: **handwritten** (baseline), **PAIR** (black-box, oracle fitness), **GA** (grey-box, continuous
-**logit** fitness from `HFBackend`). H2: the optimizer's edge over handwritten/black-box grows as the
-field tightens.
+Arms: **handwritten** (baseline) and **PAIR** (black-box, oracle fitness) run over the API. The
+**GA** grey-box arm needs continuous **logit** fitness (`HFBackend.token_logprob`), which the Ollama
+API does not expose — run it on a GPU you control (uni server), where the model loads under
+HuggingFace. The cell below is gated off (`HF_GREYBOX = False`) for that reason. H2: the optimizer's
+edge over handwritten/black-box grows as the field tightens.
 """)
 
 code(r"""
@@ -335,9 +312,10 @@ dfC[["regime", "arm", "asr", "asr_lo", "asr_hi"]]
 """)
 
 code(r"""
-# Grey-box GA with real logit fitness (HuggingFace, GPU). Heavier; keep n small.
-# Set HF_GREYBOX = False to skip (e.g. if no gated-model access).
-HF_GREYBOX = True
+# Grey-box GA with real logit fitness. Requires the model loaded locally under HuggingFace on a GPU
+# (uni server) — it CANNOT run over the Ollama API, which returns text only. Leave False on the
+# laptop; flip to True only in an environment where HFBackend can load the weights.
+HF_GREYBOX = False
 if HF_GREYBOX:
     from huggingface_hub import login
     if os.environ.get("HF_TOKEN", "").startswith("hf_"):
