@@ -68,8 +68,15 @@ class ExperimentResult:
         )
 
 
-def run_experiment(cfg: ExperimentConfig, copilot: Copilot, generator) -> ExperimentResult:
-    """Run one cell of the grid. ``generator`` is an S2 Generator instance."""
+def run_experiment(cfg: ExperimentConfig, copilot: Copilot, generator,
+                   fitness_factory=None) -> ExperimentResult:
+    """Run one cell of the grid. ``generator`` is an S2 Generator instance.
+
+    ``fitness_factory``, if given, is a ``LogRecord -> Fitness`` callable used to
+    build a per-record fitness signal for the adaptive arms (e.g. a grey-box
+    logprob fitness from HFBackend, or a black-box copilot oracle). When omitted
+    the generator falls back to its own default (offline) fitness.
+    """
     chash = cfg.hash()
     rows: list[ResultRow] = []
 
@@ -79,8 +86,10 @@ def run_experiment(cfg: ExperimentConfig, copilot: Copilot, generator) -> Experi
     )
     successes = 0
     for rec in attack_records:
+        fit = fitness_factory(rec) if fitness_factory is not None else None
         payload = generator.generate(
-            rec, cfg.target_field, attack_class=cfg.attack_class, budget=getattr(cfg, "budget", 50)
+            rec, cfg.target_field, attack_class=cfg.attack_class,
+            budget=getattr(cfg, "budget", 50), fitness=fit,
         )
         injected = payload.apply(rec)
         decision = copilot.run(injected, cfg.task)

@@ -4,6 +4,12 @@ This is the **black-box path**: run a model on a Colab GPU, expose it as an HTTP
 and run the `logsub` code on your laptop against that API URL. It gives you real RQ1 susceptibility
 numbers without local GPU.
 
+> **Just want to run all the experiments?** Open
+> [../notebooks/logsub_experiments.ipynb](../notebooks/logsub_experiments.ipynb) in Colab, attach a
+> GPU, and run it top to bottom — it hosts the models on the VM's localhost (no tunnel needed) and
+> produces every result table/figure. This guide is for the case where you want to drive a
+> Colab-hosted model from code running **on your own machine**.
+>
 > **Which path do you need?**
 > - **Black-box (this guide).** You only need the model's *text output* — copilot evaluation,
 >   PAIR attack, transfer tests. Host with Ollama + a tunnel; set `--backend ollama`.

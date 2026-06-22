@@ -94,6 +94,8 @@ Ollama/LM Studio serve quantized models and expose, at best, sampled logprobs �
 
 ### Google Colab (until uni server access)
 
+- **The full experiment suite is [notebooks/logsub_experiments.ipynb](notebooks/logsub_experiments.ipynb)** — open it in Colab, attach a GPU, and run top-to-bottom to produce the paper's results (RQ1 susceptibility, RQ4 defenses, RQ2 constraint regime, RQ3 transfer, detector baseline), each with Clopper–Pearson CIs and plots. It hosts models with Ollama on the VM's localhost (no tunnel) and uses `HFBackend` for the grey-box GA. Regenerate it with `python notebooks/_build_notebook.py`.
+- For driving a Colab-hosted model from your **laptop** instead, see [docs/colab_hosting.md](docs/colab_hosting.md) (Ollama + tunnel → `--backend ollama`).
 - Grey/white-box experiments (HF models, GA/GCG) run in [notebooks/](notebooks/) on Colab GPUs (T4/A100).
 - Clone the repo into the Colab session, `pip install -e .`, pin model revisions, and write run artifacts back to Drive so the [eval harness (S5)](SPECIFICATION.md) can regenerate figures locally.
 - Keep sample sizes modest on free-tier T4; the staged design (broad screening → focused high-sample re-runs) is built for exactly this constraint.
