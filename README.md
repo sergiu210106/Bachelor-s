@@ -54,7 +54,8 @@ data/                  # generated datasets (gitignored)
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -r requirements.txt && pip install -e .   # pinned deps, then the package
+# (or, unpinned via extras: pip install -e ".[dev]")
 cp .env.example .env          # mock credentials; edit when you have real models
 
 # Generate a synthetic, labeled dataset (no GPU needed)

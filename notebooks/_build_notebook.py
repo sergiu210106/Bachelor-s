@@ -68,16 +68,29 @@ import sys
 """)
 
 code(r"""
-# Point at the model you hosted on Colab: paste the API_URL printed by colab_model_server.ipynb.
-import os
-API_URL = "https://PASTE-THE-COLAB-URL.trycloudflare.com"
+# Point at the model you hosted on Colab. This force-reads OLLAMA_HOST straight from your repo's
+# .env every run (so it is robust even if the kernel has a stale value); set API_OVERRIDE to bypass.
+import os, pathlib, urllib.request
+
+def _env_value(key):
+    for d in [pathlib.Path.cwd(), *pathlib.Path.cwd().parents]:
+        f = d / ".env"
+        if f.exists():
+            for line in f.read_text().splitlines():
+                s = line.strip()
+                if s.startswith(key + "="):
+                    return s.split("=", 1)[1].strip().strip('"').strip("'")
+    return None
+
+API_OVERRIDE = None   # e.g. "https://xxxx.trycloudflare.com"
+API_URL = (API_OVERRIDE or _env_value("OLLAMA_HOST") or "").rstrip("/")
+assert API_URL and "PASTE" not in API_URL, "set a real OLLAMA_HOST in .env (or API_OVERRIDE here)"
 os.environ["OLLAMA_HOST"] = API_URL
 os.environ["LOGSUB_BACKEND"] = "ollama"
 
 # Names must match what you pulled in the server notebook.
 MODELS = ["llama3.1:8b"]   # e.g. + "llama3.2:3b", "qwen2.5:7b"
 
-import urllib.request
 print("reaching", API_URL, "...")
 print(urllib.request.urlopen(API_URL + "/api/version", timeout=15).read().decode())
 """)

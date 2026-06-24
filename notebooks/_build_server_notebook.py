@@ -53,7 +53,9 @@ code(r"""
 
 code(r"""
 # Install Ollama and start it in the background on localhost.
+# (zstd is required by the Ollama installer and is not preinstalled on Colab.)
 import os, subprocess, time
+!apt-get -qq install -y zstd
 !curl -fsSL https://ollama.com/install.sh | sh
 subprocess.Popen(["ollama", "serve"],
                  env={**os.environ, "OLLAMA_HOST": "127.0.0.1:11434", "OLLAMA_ORIGINS": "*"},
@@ -80,10 +82,13 @@ needs a free authtoken.
 
 code(r"""
 # Option A — Cloudflare quick tunnel (no signup)
+# --http-host-header localhost:11434 rewrites the Host header so Ollama's DNS-rebinding
+# check accepts tunnelled requests (otherwise every call returns HTTP 403).
 import subprocess, re, time
 !wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O cloudflared
 !chmod +x cloudflared
-subprocess.Popen(["./cloudflared", "tunnel", "--url", "http://localhost:11434", "--no-autoupdate"],
+subprocess.Popen(["./cloudflared", "tunnel", "--url", "http://localhost:11434",
+                  "--http-host-header", "localhost:11434", "--no-autoupdate"],
                  stdout=open("cf.log", "w"), stderr=subprocess.STDOUT)
 API_URL = None
 for _ in range(40):
@@ -97,10 +102,11 @@ print("API_URL =", API_URL)
 
 code(r"""
 # Option B — ngrok (steadier; needs a free authtoken from https://dashboard.ngrok.com)
+# host_header="localhost:11434" is the ngrok equivalent of the Host rewrite above.
 # !pip -q install pyngrok
 # from pyngrok import ngrok
 # ngrok.set_auth_token("PASTE_YOUR_AUTHTOKEN")
-# API_URL = ngrok.connect(11434, "http").public_url
+# API_URL = ngrok.connect(11434, "http", host_header="localhost:11434").public_url
 # print("API_URL =", API_URL)
 """)
 

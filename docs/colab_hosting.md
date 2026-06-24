@@ -64,7 +64,10 @@ time.sleep(5)
 !chmod +x cloudflared
 
 import subprocess, re, time
-subprocess.Popen(["./cloudflared", "tunnel", "--url", "http://localhost:11434", "--no-autoupdate"],
+# --http-host-header localhost:11434 is required: it rewrites the Host header so Ollama's
+# DNS-rebinding check accepts tunnelled requests (otherwise every call returns HTTP 403).
+subprocess.Popen(["./cloudflared", "tunnel", "--url", "http://localhost:11434",
+                  "--http-host-header", "localhost:11434", "--no-autoupdate"],
                  stdout=open("cf.log", "w"), stderr=subprocess.STDOUT)
 
 url = None
@@ -92,7 +95,7 @@ Get a token at <https://dashboard.ngrok.com> → *Your Authtoken*.
 !pip -q install pyngrok
 from pyngrok import ngrok
 ngrok.set_auth_token("PASTE_YOUR_AUTHTOKEN")
-url = ngrok.connect(11434, "http").public_url
+url = ngrok.connect(11434, "http", host_header="localhost:11434").public_url
 print("API link:", url)
 ```
 
