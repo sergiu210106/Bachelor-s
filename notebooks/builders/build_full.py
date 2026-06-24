@@ -77,7 +77,8 @@ elif os.path.exists("repo"):
 else:
     !git clone {REPO_URL} repo
     %cd repo
-!pip -q install -e ".[whitebox,stats]" pandas matplotlib
+# ollama = the Python client for the local Ollama server (black-box backend).
+!pip -q install -e ".[whitebox,stats]" ollama pandas matplotlib
 print("installed at", os.getcwd())
 """)
 
