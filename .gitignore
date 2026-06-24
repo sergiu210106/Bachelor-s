@@ -15,8 +15,9 @@ env/
 .ipynb_checkpoints/
 
 # Generated datasets & run artifacts (regenerable; some may contain scrubbed-but-sensitive data)
-data/
-runs/
+# Leading slash anchors to the repo root so we DON'T ignore the source package logsub/data/.
+/data/
+/runs/
 results/
 *.jsonl
 

@@ -65,14 +65,20 @@ code(r"""
 
 code(r"""
 # Clone the PUBLIC repo and install it (editable) with the GPU extras.
+# Re-runnable: clones fresh, pulls if already cloned, or no-ops if already inside the repo.
 import os
 REPO_URL = "https://github.com/<your-username>/<your-repo>.git"   # <-- set this
 
-if not os.path.exists("logsub"):
+if os.path.exists("logsub"):
+    pass                       # already inside the repo
+elif os.path.exists("repo"):
+    %cd repo
+    !git pull
+else:
     !git clone {REPO_URL} repo
     %cd repo
 !pip -q install -e ".[whitebox,stats]" pandas matplotlib
-print("installed")
+print("installed at", os.getcwd())
 """)
 
 code(r"""
@@ -113,6 +119,41 @@ except Exception as e:
     print("Drive not mounted (", e, ")")
 os.makedirs(RESULTS_DIR, exist_ok=True)
 print("results ->", RESULTS_DIR)
+""")
+
+md(r"""
+### Optional · secrets
+
+You do **not** need to recreate the whole `.env` here. Only real secrets belong in Colab's Secrets
+panel (🔑 in the left sidebar → add `name`/`value` → toggle *Notebook access* ON):
+
+- `HF_TOKEN` — only for **gated** models (e.g. Llama). The defaults below are **ungated Qwen**, so you
+  can skip it entirely.
+- `OPENAI_API_KEY` — only if you add the commercial reference model.
+
+Everything else (model names, the localhost Ollama host, the backend) is non-secret and is set in the
+cells. The cell below loads any present secret into the environment so `logsub` picks it up.
+""")
+
+code(r"""
+# Pull real secrets from Colab Secrets into the environment (no-op off Colab or if unset).
+try:
+    from google.colab import userdata
+    for key in ["HF_TOKEN", "OPENAI_API_KEY"]:
+        try:
+            val = userdata.get(key)
+            if val:
+                os.environ[key] = val
+                print("loaded secret:", key)
+        except Exception:
+            pass  # secret missing or notebook access not granted -> skip
+except ImportError:
+    pass  # not running on Colab
+
+# Gated HF models need a login; ungated (Qwen defaults) do not.
+if os.environ.get("HF_TOKEN", "").startswith("hf_"):
+    from huggingface_hub import login
+    login(os.environ["HF_TOKEN"])
 """)
 
 md("## 1 · Host black-box models (Ollama on localhost)")
@@ -208,6 +249,30 @@ dfA = pd.DataFrame(rowsA); save(dfA, "expA_susceptibility.csv")
 plot_asr(dfA[dfA.task == "classify"], x="attack_class", hue="model",
          title="RQ1: classification suppression ASR by attack class")
 dfA.groupby("task")[["asr"]].mean()
+""")
+
+md(r"""
+### Experiment A (reference) · commercial model (optional)
+
+Adds a commercial model as an RQ1 calibration point against the published gpt-4o-mini results. Runs
+only if `OPENAI_API_KEY` is set (Colab secret). Model/endpoint come from `REFERENCE_MODEL` /
+`OPENAI_BASE_URL` (default `gpt-4o-mini` on the OpenAI endpoint; any OpenAI-compatible endpoint works).
+**This calls a paid API** — `SCREEN_N × classes × tasks` requests.
+""")
+
+code(r"""
+from logsub.copilot.backends import OpenAIBackend
+if os.environ.get("OPENAI_API_KEY", "mock").startswith("mock"):
+    print("no OPENAI_API_KEY set (Colab secret) -> skipping the commercial reference")
+else:
+    # optionally override the model/endpoint here, e.g. os.environ["REFERENCE_MODEL"] = "gpt-4o-mini"
+    ref = OpenAIBackend()
+    for ac, task in itertools.product(CLASSES, TASKS):
+        res = run_cell(ref, task=task, attack_class=ac, field="user_agent", n=SCREEN_N)
+        rowsA.append(res_to_row(res)); print(f"{ref.name:14s} {ac.value} {task.value:10s} {res.asr}")
+    dfA = pd.DataFrame(rowsA); save(dfA, "expA_susceptibility.csv")
+    plot_asr(dfA[dfA.task == "classify"], x="attack_class", hue="model",
+             title="RQ1 incl. commercial reference")
 """)
 
 md("## Experiment B · Defense efficacy & utility trade-off (RQ4)")
