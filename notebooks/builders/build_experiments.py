@@ -451,6 +451,6 @@ nb = {
     "nbformat_minor": 5,
 }
 
-out = Path(__file__).parent / "logsub_experiments.ipynb"
+out = Path(__file__).parent.parent / "logsub_experiments.ipynb"
 out.write_text(json.dumps(nb, indent=1))
 print(f"wrote {out} ({len(cells)} cells)")

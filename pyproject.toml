@@ -26,6 +26,7 @@ whitebox = [
     "torch>=2.2",
     "transformers>=4.40",
     "accelerate>=0.30",
+    "bitsandbytes>=0.43",  # 4-bit loading to fit an 8B model on a 16 GB T4
 ]
 stats = [
     "scipy>=1.11",

@@ -6,8 +6,13 @@ This documents the code **as built**. It is the companion to [SPECIFICATION.md](
 
 - **Package:** `logsub` (Python ≥ 3.10, pydantic v2)
 - **Status:** S1–S5 functional end-to-end via a deterministic offline `MockBackend`; real-model
-  backends (Ollama black-box, HuggingFace grey/white-box) wired behind the same interface.
-- **Tests:** `.venv/bin/pytest` — 37 passing. **Lint:** `ruff check logsub tests`.
+  backends (Ollama black-box, HuggingFace grey/white-box) wired behind the same interface. All three
+  attack regimes are implemented: black-box (handwritten/PAIR), grey-box (GA on logit fitness),
+  white-box (GCG gradient optimizer).
+- **Tests:** `.venv/bin/pytest` — 38 passing. **Lint:** `ruff check logsub tests`.
+- **Install:** `pip install -r requirements.txt && pip install -e .` (laptop, black-box). The GPU
+  stack for grey/white-box is the `whitebox` extra (`pip install -e ".[whitebox]"`: torch,
+  transformers, accelerate, bitsandbytes) and runs on Colab/uni-server — see §7.
 
 ---
 
@@ -35,14 +40,18 @@ logsub/
     taxonomy.py          payload templates (A1–A4) + GA vocabulary
     base.py              Payload, Generator ABC, fitness factories
     handwritten.py       baseline generator
-    ga.py                genetic algorithm (grey-box)
+    ga.py                genetic algorithm (grey-box, logit fitness)
     pair.py              PAIR-style black-box refiner
-    gcg.py               white-box stub (guards on gradient access)
+    gcg.py               white-box GCG gradient token optimizer (charset-constrained)
   eval/                S5 — evaluation harness
     metrics.py           pure-Python Clopper–Pearson CIs
     grading.py           Decision + ground truth -> Outcome
-    harness.py           ExperimentConfig, run_experiment, ExperimentResult
-tests/                 pytest suite (S1 pipeline, metrics, end-to-end)
+    harness.py           ExperimentConfig, run_experiment (+ fitness_factory), ExperimentResult
+
+# repo root (outside the package)
+tests/                 pytest suite (S1, metrics, end-to-end, GCG guard)
+notebooks/             generated .ipynb + builders/ that produce them   (see §7)
+requirements.txt       pinned laptop deps; pyproject extras: copilot / whitebox / stats / dev
 ```
 
 ---
@@ -98,6 +107,11 @@ A second **utility pass** runs the *same copilot* over clean (un-injected) recor
 performance, so ASR and utility are reported together (the honest robustness–utility trade-off,
 spec §6). Both passes emit `ResultRow`s carrying the config hash for provenance.
 
+`run_experiment` takes an optional `fitness_factory` (`LogRecord -> Fitness`): when supplied it builds
+a per-record fitness for the adaptive arms — a grey-box logit fitness (`HFBackend.token_logprob`) for
+the GA, or a black-box copilot oracle for PAIR — instead of the generator's offline default. The
+handwritten and GCG arms ignore it (GCG carries its own gradient objective).
+
 ---
 
 ## 4. Subsystem notes
@@ -123,9 +137,11 @@ spec §6). Both passes emit `ResultRow`s carrying the config hash for provenance
   - `OllamaBackend` — black-box transfer target; uses the `ollama` client against `OLLAMA_HOST`.
   - `OpenAIBackend` — commercial reference via any OpenAI-compatible endpoint; refuses to run while
     the API key is still the mock value.
-  - `HFBackend` — grey/white-box; lazily loads transformers on GPU and exposes `token_logprob()`
-    (the continuous GA fitness) and, later, gradients for GCG. **Cannot run under Ollama** — that is
-    the entire reason it exists.
+  - `HFBackend` — grey/white-box; lazily loads transformers on GPU. Options: `load_in_4bit=True`
+    (bitsandbytes nf4) to fit an 8B model on a 16 GB T4 for forward-only use, or fp16 (default) when
+    gradients are needed. Exposes `token_logprob()` (continuous GA fitness) and `.model`/`.tokenizer`
+    properties (used by the GCG gradient loop). **Cannot run under Ollama** — that is the entire
+    reason it exists.
   - `get_backend(kind)` resolves from `.env` (`LOGSUB_BACKEND`) when `kind` is omitted.
 - **`prompts.py`** — `PromptBundle` keeps `system` / `data` / `question` separable so defenses can
   edit each part and record what they did. The data section is fenced by `=== BEGIN/END LOG ENTRY ===`
@@ -150,12 +166,22 @@ spec §6). Both passes emit `ResultRow`s carrying the config hash for provenance
 - `Generator.generate(record, field, *, attack_class, budget, fitness) -> Payload` is uniform across
   arms (FR-S2-2). `Payload.apply(record)` injects itself (constraint-enforced).
 - `Generator._fit_or_trim()` binary-trims an over-length candidate to the largest prefix that fits.
-- Arms: `HandwrittenGenerator` (first fitting template), `GAGenerator` (token-level GA over
-  `GA_VOCAB`, elitism + crossover + mutation, continuous fitness), `PairGenerator` (escalating
-  refinements selected by a binary oracle; accepts a real attacker LLM), `GCGGenerator` (raises
-  `NotImplementedError` unless given a white-box `HFBackend`).
+- Arms:
+  - `HandwrittenGenerator` — first taxonomy template that fits the field (the literature baseline).
+  - `GAGenerator` — token-level GA over `GA_VOCAB` (elitism + crossover + mutation), driven by a
+    continuous fitness; grey-box when that fitness is `HFBackend.token_logprob`.
+  - `PairGenerator` — black-box: escalating refinements selected by a binary oracle; accepts a real
+    attacker LLM.
+  - `GCGGenerator` — **white-box** Greedy Coordinate Gradient. Splits the rendered prompt around a
+    sentinel at the injection point, optimizes an adversarial token block to maximize P(target = e.g.
+    `" BENIGN"`): one-hot gradient → per-slot top-k candidate tokens → batched candidate evaluation →
+    keep the best. Candidate tokens are **restricted to those whose decoded text stays inside the
+    field's charset** (the constraint-aware part for RQ2), and the result is appended directly (no
+    separator space, which would be illegal in no-space fields). Requires a gradient-capable
+    `HFBackend`; with none it raises `NotImplementedError`. Runs only on a GPU.
 - Fitness factories in `base.py`: `make_mock_fitness()` (offline, counts suppression vocabulary) and
-  `make_record_oracle()` (black-box: 1.0 iff the copilot is actually suppressed on that record).
+  `make_record_oracle()` (black-box: 1.0 iff the copilot is actually suppressed on that record). A
+  grey-box logit fitness is built in the notebook from `HFBackend.token_logprob`.
 
 ### S5 — Evaluation
 
@@ -164,8 +190,10 @@ spec §6). Both passes emit `ResultRow`s carrying the config hash for provenance
   core function. `Rate.overlaps()` encodes the report-as-inconclusive-on-overlap rule (spec §6).
 - **`grading.py`** decides per task whether a trial was an attack trial (injection + malicious
   ground truth) or a utility trial (clean record), then maps to an `Outcome`.
-- **`harness.py`** — `ExperimentConfig.hash()` is the provenance key; `run_experiment` runs the
-  attack and utility passes and returns an `ExperimentResult` with ASR, utility, and all rows.
+- **`harness.py`** — `ExperimentConfig.hash()` is the provenance key; `run_experiment(cfg, copilot,
+  generator, fitness_factory=None)` runs the attack and utility passes and returns an
+  `ExperimentResult` with ASR, utility, and all rows. `fitness_factory` threads a per-record fitness
+  into the adaptive arms (see §3).
 
 ---
 
@@ -216,7 +244,39 @@ only step 1–5 are replaced by the model's actual behavior.
 
 ---
 
-## 7. Running
+## 7. Notebooks & Colab workflows
+
+The `.ipynb` files in `notebooks/` are **generated**, not hand-edited — each is produced by a flat
+Python builder in `notebooks/builders/` (`md("...")` / `code("...")` append cells, then valid notebook
+JSON is written to `notebooks/`). This keeps notebooks reproducible and reviewable as diffs. See
+[../notebooks/README.md](../notebooks/README.md).
+
+| Notebook | Builder | Workflow |
+|---|---|---|
+| `logsub_colab_full.ipynb` | `builders/build_full.py` | **All-in-Colab:** clones the public repo and runs the whole study on one T4. |
+| `colab_model_server.ipynb` | `builders/build_server.py` | **Host-only:** serves a model + prints a public API URL (tunnel). |
+| `logsub_experiments.ipynb` | `builders/build_experiments.py` | **Laptop driver:** runs experiments locally against a hosted API URL. |
+
+Two ways to run the study:
+
+- **Everything on a Colab T4** (`logsub_colab_full.ipynb`). Black-box cross-model sweep via Ollama on
+  localhost; grey-box GA via `HFBackend` with an **8B in 4-bit**; white-box GCG via `HFBackend` with a
+  **small fp16** model. Defaults to **ungated Qwen** checkpoints so no Hugging Face token is needed.
+  This is the only path that runs all three regimes, because grey/white-box need model internals.
+- **Host on Colab, drive from the laptop** (`colab_model_server.ipynb` → `.env` `OLLAMA_HOST` →
+  `logsub_experiments.ipynb` or the CLI). The API is **text-only**, so this path covers the black-box
+  experiments (A, B, D, E) but not the grey/white-box arms.
+
+Tunnel note: Ollama rejects non-loopback `Host` headers (DNS-rebinding guard), so the server notebook
+runs cloudflared with `--http-host-header localhost:11434` to avoid HTTP 403.
+
+**Caveat (grey/white-box prompts):** the HF arms score the *raw* rendered prompt (matching how the
+copilot queries in this testbed). For maximum rigor on instruct models, apply the model's chat
+template before `token_logprob`/GCG; relative probabilities still give the optimizer a usable signal.
+
+---
+
+## 8. Running
 
 ```bash
 .venv/bin/logsub gen  --substrate nginx_access --n 200 --out data/nginx.jsonl
@@ -231,12 +291,17 @@ with `--backend ollama` after pointing `OLLAMA_HOST` at the tunnel URL in `.env`
 
 ---
 
-## 8. Known simplifications (toward the real study)
+## 9. Known simplifications (toward the real study)
 
 - `MockBackend` stands in for real models; real susceptibility numbers (RQ1) need Ollama/HF.
 - GA fitness in offline mode is a keyword proxy; the real grey-box fitness is
   `HFBackend.token_logprob` and needs a GPU.
-- GCG is interface-only; its gradient loop is implemented on the HF/Colab backend.
+- GCG is implemented and smoke-tested on a tiny model across all three constraint regimes; the
+  full-scale runs are GPU-only (Colab T4 with a small fp16 model). HF arms use raw prompts (chat
+  template not applied) — see the §7 caveat.
+- Trained defenses (StruQ/SecAlign) and the guard detector are not run here — they are a different
+  `HFBackend` checkpoint / a GPU model, evaluated on the server.
 - Realistic (honeypot-captured) logs and the scrub-before-persist step are not yet implemented; only
   synthetic generation exists.
-- No CSV/figure exporter yet; `ExperimentResult.rows` carries everything needed to add one.
+- No CSV/figure exporter inside the package; the notebooks save CSVs and plots, and
+  `ExperimentResult.rows` carries everything needed for a package-level exporter.

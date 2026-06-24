@@ -29,3 +29,6 @@ models/
 # Local config / secrets
 .env
 *.local
+
+# claude
+.claude/

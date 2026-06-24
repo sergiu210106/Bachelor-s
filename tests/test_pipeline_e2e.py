@@ -100,6 +100,14 @@ def test_handwritten_fits_roomy_field_but_not_tight():
     assert p2.infeasible
 
 
+def test_gcg_requires_whitebox_backend():
+    # GCG needs gradients (HFBackend on GPU); with no backend it must refuse, not run.
+    from logsub.attack import GCGGenerator
+    rec = _malicious_nginx()
+    with pytest.raises(NotImplementedError):
+        GCGGenerator().generate(rec, "user_agent", attack_class=AttackClass.DIRECT_OVERRIDE)
+
+
 def test_ga_climbs_mock_fitness_and_respects_constraints():
     gen = GAGenerator(seed=3)
     rec = _malicious_nginx()

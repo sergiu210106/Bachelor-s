@@ -159,6 +159,6 @@ nb = {
     "nbformat_minor": 5,
 }
 
-out = Path(__file__).parent / "colab_model_server.ipynb"
+out = Path(__file__).parent.parent / "colab_model_server.ipynb"
 out.write_text(json.dumps(nb, indent=1))
 print(f"wrote {out} ({len(cells)} cells)")

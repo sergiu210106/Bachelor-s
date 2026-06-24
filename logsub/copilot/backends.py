@@ -189,9 +189,16 @@ class HFBackend(ModelBackend):
 
     kind = "hf"
 
-    def __init__(self, model: str | None = None):
+    def __init__(self, model: str | None = None, *, load_in_4bit: bool = False,
+                 dtype: str = "float16"):
+        """``load_in_4bit`` fits an 8B model on a 16 GB T4 for forward-only use
+        (grey-box GA, black-box). Keep it False (fp16) for a small model when you
+        need gradients (white-box GCG) — bitsandbytes 4-bit complicates backprop.
+        """
         s = get_settings()
         self.name = model or s.hf_model
+        self.load_in_4bit = load_in_4bit
+        self.dtype = dtype
         self._model = None
         self._tok = None
 
@@ -202,9 +209,30 @@ class HFBackend(ModelBackend):
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         self._tok = AutoTokenizer.from_pretrained(self.name)
-        self._model = AutoModelForCausalLM.from_pretrained(
-            self.name, torch_dtype=torch.float16, device_map="auto"
-        )
+        if self._tok.pad_token is None:
+            self._tok.pad_token = self._tok.eos_token
+        kwargs = {"device_map": "auto"}
+        if self.load_in_4bit:
+            from transformers import BitsAndBytesConfig
+
+            kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True,
+            )
+        else:
+            kwargs["torch_dtype"] = getattr(torch, self.dtype)
+        self._model = AutoModelForCausalLM.from_pretrained(self.name, **kwargs)
+        self._model.eval()
+
+    @property
+    def model(self):  # pragma: no cover - requires GPU/deps
+        self._load()
+        return self._model
+
+    @property
+    def tokenizer(self):  # pragma: no cover - requires GPU/deps
+        self._load()
+        return self._tok
 
     def supports_logprobs(self) -> bool:
         return True

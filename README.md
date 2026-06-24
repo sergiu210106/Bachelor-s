@@ -93,13 +93,17 @@ Per [SPECIFICATION.md §3](docs/SPECIFICATION.md), the two access regimes use **
 
 Ollama/LM Studio serve quantized models and expose, at best, sampled logprobs — **not gradients** — so the optimizer cannot run there. Use them only as the black-box transfer target.
 
-### Google Colab (until uni server access)
+### Google Colab — three notebooks for two workflows
 
-Colab is used **only to host the model** and expose a public API; all project code runs on your machine.
+**Workflow 1 — run everything on a Colab GPU** (no local GPU needed):
+- [notebooks/logsub_colab_full.ipynb](notebooks/logsub_colab_full.ipynb) — clones the (public) repo and runs the **whole study on one T4**: black-box (Ollama on localhost), grey-box (`HFBackend` 8B in 4-bit), **and white-box GCG** (small fp16 model). All of A–E plus the adaptive arms, with CIs and plots.
 
-1. **Host the model:** open [notebooks/colab_model_server.ipynb](notebooks/colab_model_server.ipynb) in Colab, attach a GPU, run it. It serves the model with Ollama and prints a public **API URL** (Cloudflare/ngrok tunnel). Step-by-step rationale in [docs/colab_hosting.md](docs/colab_hosting.md).
-2. **Point the project at it:** put the URL in `.env` (`OLLAMA_HOST=…`, `LOGSUB_BACKEND=ollama`).
-3. **Run experiments locally:** either the CLI (`logsub demo --backend ollama …`) or the local experiment suite [notebooks/logsub_experiments.ipynb](notebooks/logsub_experiments.ipynb), which produces the paper's results (RQ1 susceptibility, RQ4 defenses, RQ2 constraint regime, RQ3 transfer, detector baseline) with Clopper–Pearson CIs and plots. Regenerate the notebooks with `python notebooks/_build_server_notebook.py` and `python notebooks/_build_notebook.py`.
+**Workflow 2 — host on Colab, run code on your laptop** (black-box only):
+1. [notebooks/colab_model_server.ipynb](notebooks/colab_model_server.ipynb) — serves the model with Ollama and prints a public **API URL** (Cloudflare/ngrok tunnel). Rationale: [docs/colab_hosting.md](docs/colab_hosting.md).
+2. Put the URL in `.env` (`OLLAMA_HOST=…`, `LOGSUB_BACKEND=ollama`).
+3. Run the CLI (`logsub demo --backend ollama …`) or [notebooks/logsub_experiments.ipynb](notebooks/logsub_experiments.ipynb) locally (black-box experiments A, B, D, E).
+
+The `.ipynb` files are generated from Python builders in [notebooks/builders/](notebooks/builders/) — regenerate with e.g. `python notebooks/builders/build_full.py`.
 
 > **Backend split:** the API exposes **text only** (black-box), which covers RQ1/RQ3/RQ4 and the PAIR attack. The grey/white-box arm (GA logit fitness, GCG) needs a GPU you control — run those on the uni server, not over the API.
 - Clone the repo into the Colab session, `pip install -e .`, pin model revisions, and write run artifacts back to Drive so the [eval harness (S5)](docs/SPECIFICATION.md) can regenerate figures locally.
