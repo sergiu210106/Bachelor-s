@@ -1,0 +1,30 @@
+\section{Defenses Against Prompt Injection}
+\label{sec:def}
+
+Defenses differ in \emph{where} they act in the pipeline and \emph{what} they require (Fig.~\ref{fig:pipeline}). All of them try to re-introduce the separation between instructions and data that the architecture lacks (\S\ref{sec:pi-root}).
+
+\subsection{Inference-time defenses}
+\label{sec:def-inference}
+
+These change only how the prompt is built or how the output is read, and require no retraining:
+\begin{itemize}
+\item \textbf{Structured prompting}: clearly labelled instruction and data sections.
+\item \textbf{Field sanitization and tagging}: remove or mark attacker-controlled fields.
+\item \textbf{Constrained output}: force a closed answer format (e.g.\ a single label).
+\item \textbf{Spotlighting}~\cite{hines2024spotlighting}: make the provenance of untrusted text visible to the model by \emph{delimiting} (random delimiters around the data), \emph{datamarking} (a marker token interleaved throughout the data, e.g.\ every space replaced by \texttt{\^{}}), or \emph{encoding} (e.g.\ Base64).
+\end{itemize}
+\note{Show the running example under datamarking. Note that encoding is reported to work well only on high-capacity models, which is a concern for small local models.}
+
+\subsection{Training-time defenses}
+\label{sec:def-train}
+
+\textbf{StruQ}~\cite{chen2025struq} separates the prompt and the data into two channels marked by reserved delimiter tokens that are filtered out of the data, and fine-tunes the model (\emph{structured instruction tuning}) to follow only instructions in the prompt channel.
+
+\textbf{SecAlign}~\cite{chen2025secalign} casts robustness as preference optimization: for an input $x$ containing an injected instruction, the preferred response $y_w$ answers the legitimate instruction and the rejected response $y_l$ answers the injected one, and the model is trained with the DPO loss of Eq.~\eqref{eq:dpo}. Meta-SecAlign~\cite{chen2025metasecalign} releases open-weight Llama models trained this way, which makes evaluating a trained defense possible without training it.
+
+\note{One paragraph on known limits: optimization-based attacks still succeed against StruQ; architecture-aware attacks that target attention break StruQ and SecAlign~\cite{pandya2025astra}; and it is an open question whether delimiter-based separation is meaningful when the ``data'' is structured \texttt{key=value} telemetry rather than prose.}
+
+\subsection{Detection}
+\label{sec:def-detect}
+
+Instead of hardening the copilot, a separate classifier $g(d) \in \{\text{clean}, \text{injected}\}$ inspects each record before it reaches the LLM. \note{Options from cheapest to most expensive: regex/keyword rules; small dedicated classifiers (e.g.\ Prompt Guard); general guard LLMs (e.g.\ Llama Guard). Trade-off: false positives on legitimate but unusual log content.}

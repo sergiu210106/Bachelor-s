@@ -1,0 +1,54 @@
+\section{Large Language Models}
+\label{sec:llm}
+
+This section introduces only the concepts used later in the report: how an LLM assigns probabilities to text (\S\ref{sec:llm-ar}), why the transformer has no notion of trusted input (\S\ref{sec:llm-attn}), how an assistant is aligned (\S\ref{sec:llm-align}), and what a locally deployed model exposes to an attacker (\S\ref{sec:llm-local}).
+
+\subsection{Tokens and autoregressive modelling}
+\label{sec:llm-ar}
+
+Text is split by a \emph{tokenizer} into a sequence of tokens $x = (x_1,\dots,x_n)$ from a finite vocabulary $\vocab$ (typically $|\vocab| \approx 10^5$). An autoregressive language model with parameters $\theta$ factorizes the probability of an output $y=(y_1,\dots,y_m)$ given a context $x$ as
+\begin{equation}
+p_\theta(y \mid x) = \prod_{t=1}^{m} p_\theta(y_t \mid x, y_{<t}).
+\label{eq:ar}
+\end{equation}
+
+At each step the network outputs a vector of \emph{logits} $z \in \mathbb{R}^{|\vocab|}$, which the softmax function turns into a distribution over the next token:
+\begin{equation}
+p_\theta(y_t = v \mid x, y_{<t}) = \frac{\exp(z_v)}{\sum_{u\in\vocab}\exp(z_u)}.
+\label{eq:softmax}
+\end{equation}
+The log-probabilities $\log p_\theta(\cdot)$ are the quantity an attacker will later try to maximize (\S\ref{sec:opt}).
+
+\note{One paragraph on tokenization subtleties: constraints on log fields are expressed in characters, but models and optimizers operate on tokens; a token edit can produce characters that are not allowed in the field.}
+
+\subsection{The transformer and self-attention}
+\label{sec:llm-attn}
+
+Modern LLMs are decoder-only transformers~\cite{vaswani2017attention}. Their core operation, scaled dot-product attention, lets each position combine information from every earlier position:
+\begin{equation}
+\mathrm{Attn}(Q,K,V) = \mathrm{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)V,
+\label{eq:attn}
+\end{equation}
+where $Q,K,V$ are linear projections of the token representations.
+
+The property that matters for this report: \emph{every token in the context window is processed by the same mechanism}. Nothing in the architecture marks some tokens as trusted instructions and others as untrusted data; any separation must be learned or imposed from outside (\S\ref{sec:def}).
+
+\subsection{From pretrained model to assistant}
+\label{sec:llm-align}
+
+\note{Explain supervised instruction tuning (SFT): the model is fine-tuned on (instruction, response) pairs so that it \emph{follows instructions}. Point out the irony: instruction-following is exactly what makes injection work.}
+
+Preference alignment further adjusts the model so that it prefers some responses over others. \emph{Direct Preference Optimization} (DPO)~\cite{rafailov2023dpo} learns directly from triples $(x, y_w, y_l)$ where $y_w$ is the preferred and $y_l$ the rejected response, with a frozen reference model $\pi_{\mathrm{ref}}$:
+\begin{equation}
+\begin{split}
+\mathcal{L}_{\mathrm{DPO}}(\theta) = -\mathbb{E}\Big[\log\sigma\Big(&\beta\log\frac{\pi_\theta(y_w\mid x)}{\pi_{\mathrm{ref}}(y_w\mid x)}\\
+ - {}&\beta\log\frac{\pi_\theta(y_l\mid x)}{\pi_{\mathrm{ref}}(y_l\mid x)}\Big)\Big],
+\end{split}
+\label{eq:dpo}
+\end{equation}
+where $\sigma$ is the logistic function and $\beta$ controls how far $\pi_\theta$ may move from $\pi_{\mathrm{ref}}$. Intuitively, the loss widens the probability gap between the preferred and the rejected answer. This objective reappears in the SecAlign defense (\S\ref{sec:def-train}).
+
+\subsection{Local deployment and access levels}
+\label{sec:llm-local}
+
+\note{Contrast the two ways a model is served locally and what each exposes: (i) quantized inference servers (Ollama, LM Studio) return generated text and at most sampled log-probabilities; (ii) full/half-precision models in HuggingFace Transformers + PyTorch expose logits and gradients with respect to the input. This is the basis of the access levels in Table~\ref{tab:access}.}

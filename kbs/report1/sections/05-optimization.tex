@@ -1,0 +1,77 @@
+\section{Adversarial Payload Generation as Constrained Optimization}
+\label{sec:opt}
+
+Hand-written payloads such as those in Fig.~\ref{fig:running-example} are guesses. This section formulates the search for an effective payload as an optimization problem, which allows payloads to be generated systematically and adapted to a specific model and field.
+
+\subsection{Problem formulation}
+\label{sec:opt-problem}
+
+Let $f$ be the target field, with admissible set
+\begin{equation}
+\adm(f) = \{\, \delta \in \Sigma_f^{*} \;:\; |\delta| \le L_f \,\},
+\label{eq:admissible}
+\end{equation}
+let $\ctx(\delta)$ be the copilot's context with payload $\delta$ inserted into field $f$, and let $y^{*}$ be the attacker's target output (e.g.\ the label \texttt{BENIGN}).
+
+\begin{Definition}[Constrained payload optimization]
+\label{def:opt}
+\begin{equation}
+\delta^{*} = \arg\max_{\delta \in \adm(f)} \; \underbrace{\log p_\theta\big(y^{*} \mid \ctx(\delta)\big)}_{\text{fitness } F(\delta)} \;-\; \lambda\, D(\delta),
+\label{eq:opt}
+\end{equation}
+where $D(\delta) \ge 0$ is an optional detectability penalty and $\lambda \ge 0$ its weight.
+\end{Definition}
+
+\note{Explain why the search space is discrete and enormous ($|\Sigma_f|^{L_f}$), why $L_f$ is the main difficulty knob (a 200-character User-Agent vs.\ a 32-character username), and why a \emph{continuous} fitness (log-probability of $y^{*}$) is far more informative than a binary success flag: two failing payloads are not equally close to success.}
+
+\subsection{Gradient-guided search (GCG)}
+\label{sec:opt-gcg}
+
+Greedy Coordinate Gradient~\cite{zou2023gcg} operates on the token sequence of the payload. Representing token $i$ by a one-hot vector $e_{x_i} \in \{0,1\}^{|\vocab|}$, it computes the gradient of the loss $\mathcal{L}(\delta) = -\log p_\theta(y^{*}\mid \ctx(\delta))$ with respect to that vector, and uses its most negative entries as candidate substitutions:
+\begin{equation}
+\mathcal{X}_i = \operatorname{top-}k\big(-\nabla_{e_{x_i}} \mathcal{L}(\delta)\big).
+\label{eq:gcg}
+\end{equation}
+At every iteration a batch of single-token substitutions is sampled from the sets $\mathcal{X}_i$, each candidate is evaluated exactly, and the best one is kept.
+
+\note{Discuss the limits in this setting: needs gradients (white-box); usually needs many adversarial tokens, which short fields do not allow; substituted tokens must decode to characters in $\Sigma_f$, so candidates have to be filtered.}
+
+\subsection{Evolutionary search (genetic algorithm)}
+\label{sec:opt-ga}
+
+A genetic algorithm (GA)~\cite{holland1992adaptation} needs only the fitness value $F(\delta)$, i.e.\ grey-box access. Individuals are candidate payloads; Algorithm~\ref{alg:ga} gives the general scheme.
+
+\begin{algorithm}[t]
+\caption{Genetic algorithm for payload search}
+\label{alg:ga}
+\begin{algorithmic}[1]
+\REQUIRE field $f$, population size $N$, generations $G$, fitness $F$
+\STATE $P \leftarrow$ $N$ seed payloads in $\adm(f)$ (e.g.\ hand-written)
+\FOR{$g = 1$ to $G$}
+  \STATE evaluate $F(\delta)$ for every $\delta \in P$
+  \STATE $E \leftarrow$ best individuals of $P$ (elitism)
+  \WHILE{$|E| < N$}
+    \STATE select parents $\delta_a,\delta_b$ from $P$ (tournament)
+    \STATE $\delta' \leftarrow \mathrm{mutate}(\mathrm{crossover}(\delta_a,\delta_b))$
+    \STATE $\delta' \leftarrow \mathrm{repair}_f(\delta')$ \COMMENT{enforce $\delta' \in \adm(f)$}
+    \STATE $E \leftarrow E \cup \{\delta'\}$
+  \ENDWHILE
+  \STATE $P \leftarrow E$
+\ENDFOR
+\RETURN $\arg\max_{\delta\in P} F(\delta)$
+\end{algorithmic}
+\end{algorithm}
+
+\note{Define the operators on strings: character/token/word-level mutation (insert, delete, substitute), one-point crossover, and the repair step (truncate to $L_f$, drop or map characters outside $\Sigma_f$). One sentence on why particle swarm optimization (PSO) is a poor fit: it is defined over continuous spaces and needs a non-trivial discrete adaptation.}
+
+\subsection{LLM-driven iterative refinement (PAIR)}
+\label{sec:opt-pair}
+
+PAIR~\cite{chao2025pair} uses a second \emph{attacker LLM} that proposes a payload, observes the target's response, and rewrites the payload in light of the failure, repeating until success or a query budget is exhausted. It requires only black-box access.
+
+\note{Frame PAIR as search in which the ``gradient'' is natural-language feedback; it produces fluent, human-readable payloads (harder to filter by perplexity) but has no direct way to respect hard length constraints except by prompting and rejection.}
+
+\subsection{Transferability}
+\label{sec:opt-transfer}
+
+A payload is \emph{transferable} if, optimized against a source model $\theta_s$, it also succeeds against a target model $\theta_t \ne \theta_s$. Transferability is what makes white-box optimization dangerous in practice: an attacker can optimize against a downloadable open-weight model and then attack a deployment they can only observe as a black box~\cite{zou2023gcg}.

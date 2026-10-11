@@ -1,0 +1,38 @@
+\section{How the Concepts Fit Together}
+\label{sec:synthesis}
+
+Fig.~\ref{fig:pipeline} combines the concepts of this report into the system studied in the thesis: an attacker optimizes a payload within a log field (\S\ref{sec:opt}), the record passes through optional detection and is placed in the copilot's context (\S\ref{sec:pi}), the copilot is protected by inference-time or trained defenses (\S\ref{sec:def}), and its decisions are scored for attack success and utility (\S\ref{sec:eval}).
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  node distance=3mm and 4mm,
+  box/.style={draw, rounded corners=2pt, align=center, font=\scriptsize, minimum height=7mm, inner sep=2pt},
+  arr/.style={-{Stealth[length=2mm]}},
+]
+\node[box, fill=red!10] (att) {Attacker\\optimizer};
+\node[box, right=of att] (log) {Log record\\(field $f$)};
+\node[box, right=of log, fill=blue!8] (det) {Detector\\$g(d)$};
+\node[box, right=of det, fill=blue!8] (llm) {Copilot LLM\\+ defense};
+\node[box, below=6mm of llm] (out) {Decision $y$};
+\node[box, left=of out] (eval) {Evaluation\\ASR, utility, CI};
+\draw[arr] (att) -- node[above, font=\tiny]{$\delta$} (log);
+\draw[arr] (log) -- (det);
+\draw[arr] (det) -- (llm);
+\draw[arr] (llm) -- (out);
+\draw[arr] (out) -- (eval);
+\draw[arr, dashed] (out.south) to[bend left=25] node[below, font=\tiny]{feedback $F(\delta)$} (att.south);
+\end{tikzpicture}
+\caption{The concepts of this report combined: payload optimization, the copilot pipeline with its defense points, and evaluation.}
+\label{fig:pipeline}
+\end{figure}
+
+The thesis uses these concepts to address four research questions:
+\begin{itemize}
+\item \textbf{RQ1}: how susceptible are small local open-source models to log-substrate injection on Linux logs (\S\ref{sec:pi}, \S\ref{sec:threat})?
+\item \textbf{RQ2}: does constrained optimization (white-/grey-box) beat LLM-driven refinement (black-box) as the field constraint tightens (\S\ref{sec:opt})?
+\item \textbf{RQ3}: do optimized payloads transfer across models (\S\ref{sec:opt-transfer})?
+\item \textbf{RQ4}: how do trained defenses and detectors compare to inference-time defenses, and at what utility cost (\S\ref{sec:def}, \S\ref{sec:eval})?
+\end{itemize}
+
+\note{Close with 2--3 sentences of conclusion: what the reader should now understand, and that the related literature is surveyed in the second report (SLR).}

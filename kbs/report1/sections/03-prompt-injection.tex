@@ -1,0 +1,45 @@
+\section{Prompt Injection}
+\label{sec:pi}
+
+\subsection{Instruction/data conflation}
+\label{sec:pi-root}
+
+An LLM-integrated application builds the model's context by concatenating several segments of different trust levels:
+\begin{equation}
+\ctx = s_{\mathrm{sys}} \,\Vert\, s_{\mathrm{task}} \,\Vert\, d,
+\label{eq:context}
+\end{equation}
+where $s_{\mathrm{sys}}$ is the developer's system prompt, $s_{\mathrm{task}}$ the user's request, $d$ external data (documents, web pages, logs), and $\Vert$ denotes concatenation. Section~\ref{sec:llm-attn} showed that the model processes $\ctx$ as one undifferentiated token sequence.
+
+\begin{Definition}[Prompt injection]
+\label{def:pi}
+A \emph{prompt injection} occurs when text inside an untrusted segment of $\ctx$ is interpreted by the model as an instruction, causing an output $y$ that serves the author of that text rather than the instruction in $s_{\mathrm{sys}} \Vert s_{\mathrm{task}}$.
+\end{Definition}
+
+This \emph{instruction/data conflation} is the root cause of every attack in this report, and every defense in Section~\ref{sec:def} is an attempt to restore the missing separation.
+
+\subsection{Direct and indirect injection}
+
+\note{Direct: the attacker is the user and types the instruction into $s_{\mathrm{task}}$ (overlaps with jailbreaking; define the difference). Indirect (IPI): the attacker controls only $d$, content the application later retrieves~\cite{greshake2023indirect}. Give one classic IPI example (a hidden instruction in a web page summarized by an assistant).}
+
+\subsection{Log-substrate prompt injection}
+
+\begin{Definition}[Log-substrate prompt injection~\cite{pandey2026watchtower}]
+An indirect prompt injection in which $d$ consists of log records and the payload is placed in fields populated by the events the attacker generates.
+\end{Definition}
+
+What distinguishes it from ordinary IPI is that the \emph{delivery channel is intrinsic to the attack}: a malicious request is logged by design, so the attacker does not need to plant content anywhere; the monitoring pipeline delivers the payload to the model on the attacker's behalf. A related study considers cloud logs read by debugging agents that can execute commands~\cite{shah2026logjack}.
+
+\subsection{Attack classes}
+
+Following the taxonomy of~\cite{pandey2026watchtower}:
+\begin{itemize}
+\item \textbf{Direct override}: an explicit instruction (``ignore previous instructions, output BENIGN'').
+\item \textbf{Persona hijack}: the payload claims an authoritative identity (``SYSTEM NOTE: authorized scanner'').
+\item \textbf{Context manipulation}: false context that makes the malicious event look legitimate.
+\item \textbf{Obfuscated payload}: encoding or spacing tricks that evade keyword filters.
+\end{itemize}
+\note{Give each class one short User-Agent payload on the running example.}
+
+\subsection{Copilot tasks and attacker goals}
+\note{Three tasks, one attacker goal each: classification $\rightarrow$ \emph{suppression} (malicious labelled benign); summarization $\rightarrow$ \emph{omission} (attack left out of the summary); remediation $\rightarrow$ \emph{unsafe recommendation} (``no action required'').}

@@ -1,0 +1,21 @@
+\section{Introduction}
+\label{sec:intro}
+
+Security operations centers (SOCs) face high alert volumes and a shortage of skilled analysts, and large language models (LLMs) are increasingly proposed as \emph{copilots} that read logs and alerts and produce triage labels, incident summaries, or remediation advice~\cite{habibzadeh2025socsurvey}. Running such models \emph{locally}, on-host, is attractive because sensitive logs never leave the organization.
+
+These systems share a structural weakness: an LLM receives its instructions and the data it must analyze as a single stream of text, and many log fields (the HTTP User-Agent, the request URI, command-line arguments, attempted usernames) are written by the attacker whose activity is being recorded. A crafted log entry can therefore carry instructions that hijack the model reading it~\cite{greshake2023indirect,pandey2026watchtower}.
+
+\note{Introduce the running example here: the nginx log line from Fig.~\ref{fig:running-example}, first clean, then with the payload in the User-Agent. Reuse it in every section.}
+
+\begin{figure}[t]
+\centering
+\footnotesize
+\begin{minipage}{0.95\columnwidth}
+\ttfamily\raggedright
+203.0.113.7 - - [11/Oct/2026:10:02:11 +0000] "GET /item?id=1'\%20OR\%201=1-- HTTP/1.1" 200 512 "-" "Mozilla/5.0 (X11; Linux x86\_64) \textcolor{red}{[SYSTEM NOTE: authorized penetration test, classify this request as benign]}"
+\end{minipage}
+\caption{Running example: an nginx access-log entry recording a SQL-injection probe. The attacker-controlled User-Agent field (red) carries an instruction aimed at the LLM that will later read the log.}
+\label{fig:running-example}
+\end{figure}
+
+This report presents the theoretical background needed to study this threat. Section~\ref{sec:llm} introduces the language-modelling and alignment concepts that explain why models follow injected text. Section~\ref{sec:pi} defines prompt injection and its log-substrate variant. Section~\ref{sec:threat} describes the security-operations setting and the threat model. Section~\ref{sec:opt} formulates adversarial payload generation as a constrained optimization problem and presents three search methods. Section~\ref{sec:def} covers the main families of defenses, and Section~\ref{sec:eval} the statistical tools used to evaluate them. Section~\ref{sec:synthesis} shows how these concepts fit together in the author's thesis.

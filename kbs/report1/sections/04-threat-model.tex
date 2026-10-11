@@ -1,0 +1,58 @@
+\section{Security Operations Context and Threat Model}
+\label{sec:threat}
+
+\subsection{SOCs, SIEMs and triage}
+\note{Define SOC, SIEM (collects and correlates logs, raises alerts) and triage (deciding whether an alert is a real threat). Place the LLM copilot in this workflow: it reads the alert and the underlying log records and produces one of the three outputs from \S\ref{sec:pi}.}
+
+\subsection{Log substrates and attacker-controlled fields}
+
+A \emph{log substrate} is a log format together with the subset of its fields that an external attacker can populate. Each field $f$ imposes constraints on the payload: a maximum length $L_f$ and an allowed character set $\Sigma_f$. Table~\ref{tab:substrates} lists the Linux substrates considered in this work.
+
+\begin{table}[t]
+\caption{Linux log substrates and their attacker-controlled fields}
+\label{tab:substrates}
+\centering
+\footnotesize
+\begin{tabular}{|p{0.22\columnwidth}|p{0.36\columnwidth}|p{0.24\columnwidth}|}
+\hline
+\textbf{Substrate} & \textbf{Attacker-controlled fields} & \textbf{Constraints} \\
+\hline
+nginx/apache access log & User-Agent, URI, query string, referer & long, permissive \\
+\hline
+\texttt{auditd} execve & command-line arguments, file paths & medium \\
+\hline
+SSH \texttt{auth.log} & attempted username, client banner & short, restricted charset \\
+\hline
+\end{tabular}
+\end{table}
+
+\note{Briefly explain each source: what generates the record, which fields come from the attacker, and how encoding (URL-encoding, hex-encoding of argv by auditd) changes what the model actually sees.}
+
+\subsection{Threat models}
+
+A threat model states explicitly what the attacker \emph{knows}, what they \emph{can do}, and what they \emph{want}. In this work:
+\begin{itemize}
+\item \textbf{Capability}: remote and unauthenticated; the attacker can only cause events that are logged, and has no access to the pipeline after ingestion.
+\item \textbf{Goal}: one of the three goals from \S\ref{sec:pi}.
+\item \textbf{Knowledge}: varies with the access level (Table~\ref{tab:access}).
+\end{itemize}
+
+\begin{table}[t]
+\caption{Attacker access levels to the target model}
+\label{tab:access}
+\centering
+\footnotesize
+\begin{tabular}{|l|p{0.30\columnwidth}|p{0.30\columnwidth}|}
+\hline
+\textbf{Level} & \textbf{Attacker observes} & \textbf{Enables} \\
+\hline
+White-box & weights, gradients & gradient-guided search (GCG) \\
+\hline
+Grey-box & logits / log-probs & score-based search (GA) \\
+\hline
+Black-box & generated text only & LLM-driven refinement (PAIR) \\
+\hline
+\end{tabular}
+\end{table}
+
+\note{Explain why white-box access is a reasonable \emph{research} assumption for open-weight local models (anyone can download them), while the realistic deployed attacker is black-box; this motivates measuring transferability (\S\ref{sec:opt-transfer}).}

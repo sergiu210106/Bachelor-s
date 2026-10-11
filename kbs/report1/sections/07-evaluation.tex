@@ -1,0 +1,28 @@
+\section{Evaluation Methodology}
+\label{sec:eval}
+
+\subsection{Attack success rate}
+
+For $n$ independent attack attempts of which $k$ achieve the attacker's goal, the \emph{attack success rate} is $\widehat{\mathrm{ASR}} = k/n$. It is specialized per task: suppression rate (classification), omission rate (summarization), and unsafe-recommendation rate (remediation).
+
+\subsection{Utility and the robustness--utility trade-off}
+
+A defense that makes the copilot label everything as malicious has zero ASR and no value. Every defense must therefore also be measured by its \emph{utility}: task performance on a clean, labelled, un-attacked dataset~\cite{debenedetti2024agentdojo}. \note{Define utility for each task, e.g.\ accuracy or $F_1$ for classification.}
+
+\subsection{Confidence intervals for proportions}
+
+$\widehat{\mathrm{ASR}}$ is an estimate of an unknown proportion and must be reported with its uncertainty. The Clopper--Pearson interval~\cite{clopper1934} is the exact interval for a binomial proportion. At level $1-\alpha$ its bounds are quantiles of the Beta distribution:
+\begin{equation}
+\begin{split}
+p_{\mathrm{low}} &= B\!\left(\tfrac{\alpha}{2};\; k,\; n-k+1\right),\\
+p_{\mathrm{high}} &= B\!\left(1-\tfrac{\alpha}{2};\; k+1,\; n-k\right),
+\end{split}
+\label{eq:cp}
+\end{equation}
+where $B(q; a, b)$ is the $q$-quantile of $\mathrm{Beta}(a,b)$ (with $p_{\mathrm{low}}=0$ if $k=0$ and $p_{\mathrm{high}}=1$ if $k=n$).
+
+\note{Worked example: for $k=6$ successes out of $n=20$, $\widehat{\mathrm{ASR}}=0.30$ but the 95\% interval is roughly $[0.12, 0.54]$; with $n=200$ and $k=60$ it shrinks to roughly $[0.24, 0.37]$. Rule used in practice: non-overlapping intervals indicate a real difference; overlapping intervals are reported as inconclusive.}
+
+\subsection{Staged experimental design}
+
+\note{The full grid (models $\times$ attack classes $\times$ defenses $\times$ tasks $\times$ fields) is too large to run with large $n$ in every cell. Screening: run all cells with small $n$; confirmation: re-run only the interesting cells with large $n$.}

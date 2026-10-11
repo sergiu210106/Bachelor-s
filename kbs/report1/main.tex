@@ -1,0 +1,79 @@
+% Report 1 -- Theoretical Background
+% Based on the course latex-template (IEEEtran conference, kbs/latex-template.zip).
+\documentclass[conference]{IEEEtran}
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{enumitem}
+\usepackage{multirow}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{comment}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit}
+
+\newtheorem{Theorem}{Theorem}
+\newtheorem{Definition}[Theorem]{Definition}
+
+\setlist{itemsep=0pt, topsep=2pt}
+
+\definecolor{darkorange}{rgb}{0.91, 0.41, 0.17}
+\definecolor{deepblue}{rgb}{0,0,0.5}
+
+% Drafting notes: rendered in orange so unfinished parts are visible in the PDF.
+% Set \draftfalse before submitting to hide every remaining note.
+\newif\ifdraft
+\drafttrue
+\newcommand{\note}[1]{\ifdraft\textcolor{darkorange}{[\textit{#1}]}\fi}
+
+% Shared notation
+\newcommand{\vocab}{\mathcal{V}}
+\newcommand{\adm}{\mathcal{A}}
+\newcommand{\ctx}{C}
+
+\hyphenation{op-tical net-works semi-conduc-tor}
+
+\begin{document}
+
+\title{Theoretical Foundations of Prompt Injection\\ Against LLM-Based Security Copilots}
+
+\author{\IEEEauthorblockN{Sergiu-Florian Tuduce}
+\IEEEauthorblockA{\textit{Faculty of Mathematics and Computer Science} \\
+\textit{Babe\c{s}-Bolyai University}\\
+Cluj-Napoca, Romania \\
+sergiumoduce@gmail.com}
+}
+
+\maketitle
+\thispagestyle{plain}
+\pagestyle{plain}
+
+\begin{abstract}
+Large language models (LLMs) are increasingly deployed as assistants in security operations centers, where they read system logs and produce triage decisions. Many log fields, however, are written by the very attacker whose activity is being logged, which turns the evidence stream into a channel for injecting instructions into the model. This report presents the theoretical background required to study this threat, known as \emph{log-substrate prompt injection}: the autoregressive language-modelling and alignment concepts that explain why models follow injected text, a formal account of prompt injection and threat modelling, the formulation of adversarial payload generation as a constrained discrete optimization problem (gradient-guided, evolutionary, and LLM-driven search), the families of defenses (inference-time, training-time, and detection-based), and the statistical tools used to evaluate attacks and defenses. These concepts form the foundation of the author's bachelor's thesis on log-substrate prompt injection against local open-source LLMs reading Linux host logs.
+\end{abstract}
+
+\begin{IEEEkeywords}
+large language models, prompt injection, adversarial machine learning, security operations, constrained optimization
+\end{IEEEkeywords}
+
+\IEEEpeerreviewmaketitle
+
+\input{sections/01-introduction}
+\input{sections/02-llm-foundations}
+\input{sections/03-prompt-injection}
+\input{sections/04-threat-model}
+\input{sections/05-optimization}
+\input{sections/06-defenses}
+\input{sections/07-evaluation}
+\input{sections/08-synthesis}
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\end{document}
