@@ -7,7 +7,7 @@ For $n$ independent attack attempts of which $k$ achieve the attacker's goal, th
 
 \subsection{Utility and the robustness--utility trade-off}
 
-A defense that makes the copilot label everything as malicious has zero ASR and no value. Every defense must therefore also be measured by its \emph{utility}: task performance on a clean, labelled, un-attacked dataset~\cite{debenedetti2024agentdojo}. \note{Define utility for each task, e.g.\ accuracy or $F_1$ for classification.}
+A defense that makes the copilot label everything as malicious has zero ASR and no value. Every defense must therefore also be measured by its \emph{utility}: task performance on a clean, labelled, un-attacked dataset~\cite{debenedetti2024agentdojo}. For classification, utility is the accuracy or the $F_1$ score of the malicious class (the latter is preferable because benign events usually dominate); for summarization, the fraction of summaries that mention every relevant event; for remediation, the fraction of recommendations judged appropriate. A defense is only useful if it lowers ASR while keeping utility close to that of the undefended model.
 
 \subsection{Confidence intervals for proportions}
 
@@ -21,8 +21,8 @@ p_{\mathrm{high}} &= B\!\left(1-\tfrac{\alpha}{2};\; k+1,\; n-k\right),
 \end{equation}
 where $B(q; a, b)$ is the $q$-quantile of $\mathrm{Beta}(a,b)$ (with $p_{\mathrm{low}}=0$ if $k=0$ and $p_{\mathrm{high}}=1$ if $k=n$).
 
-\note{Worked example: for $k=6$ successes out of $n=20$, $\widehat{\mathrm{ASR}}=0.30$ but the 95\% interval is roughly $[0.12, 0.54]$; with $n=200$ and $k=60$ it shrinks to roughly $[0.24, 0.37]$. Rule used in practice: non-overlapping intervals indicate a real difference; overlapping intervals are reported as inconclusive.}
+For example, with $k=6$ successes out of $n=20$ attempts, $\widehat{\mathrm{ASR}}=0.30$, but the 95\% interval is approximately $[0.12, 0.54]$: the true rate could be anywhere from rare to more than half. With $n=200$ and $k=60$ the point estimate is the same, but the interval shrinks to approximately $[0.24, 0.37]$. In practice, two configurations (e.g.\ with and without a defense) are considered different only if their intervals do not overlap; overlapping intervals are reported as inconclusive rather than as an improvement.
 
 \subsection{Staged experimental design}
 
-\note{The full grid (models $\times$ attack classes $\times$ defenses $\times$ tasks $\times$ fields) is too large to run with large $n$ in every cell. Screening: run all cells with small $n$; confirmation: re-run only the interesting cells with large $n$.}
+The full experimental grid (models $\times$ attack classes $\times$ defenses $\times$ tasks $\times$ fields) contains hundreds of cells, and running each with a large $n$ is too expensive on local hardware. The experiments are therefore run in two stages. In the \emph{screening} stage every cell is run with a small $n$, which is enough to separate clearly ineffective configurations from promising ones. In the \emph{confirmation} stage only the interesting cells (those with high ASR or overlapping intervals between competing configurations) are re-run with a large $n$, so that the final conclusions rest on narrow confidence intervals.

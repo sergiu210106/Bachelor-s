@@ -19,7 +19,7 @@ p_\theta(y_t = v \mid x, y_{<t}) = \frac{\exp(z_v)}{\sum_{u\in\vocab}\exp(z_u)}.
 \end{equation}
 The log-probabilities $\log p_\theta(\cdot)$ are the quantity an attacker will later try to maximize (\S\ref{sec:opt}).
 
-\note{One paragraph on tokenization subtleties: constraints on log fields are expressed in characters, but models and optimizers operate on tokens; a token edit can produce characters that are not allowed in the field.}
+Tokenization introduces a mismatch that matters for attacks on logs. The constraints of a log field are expressed in \emph{characters} (a maximum length and an allowed character set), whereas the model, and any optimizer working on its inputs, operates on \emph{tokens}. A single token may span several characters, the same string can often be split into tokens in more than one way, and replacing one token by another can introduce characters (spaces, quotes, non-ASCII bytes) that the field does not accept. A payload found in token space must therefore always be decoded and checked against the field's character constraints.
 
 \subsection{The transformer and self-attention}
 \label{sec:llm-attn}
@@ -36,7 +36,7 @@ The property that matters for this report: \emph{every token in the context wind
 \subsection{From pretrained model to assistant}
 \label{sec:llm-align}
 
-\note{Explain supervised instruction tuning (SFT): the model is fine-tuned on (instruction, response) pairs so that it \emph{follows instructions}. Point out the irony: instruction-following is exactly what makes injection work.}
+A pretrained model only continues text. To obtain an assistant, it is first fine-tuned by \emph{supervised instruction tuning} (SFT) on pairs (instruction, desired response), using the same next-token objective of Eq.~\eqref{eq:ar} restricted to the response tokens. After SFT the model has learned a general behaviour: when the context contains an instruction, produce a response that carries it out. This is precisely the behaviour an injection exploits. The model has been trained to follow instructions, but not to check \emph{who} wrote them, so an instruction embedded in a log line can be obeyed just like one written by the developer.
 
 Preference alignment further adjusts the model so that it prefers some responses over others. \emph{Direct Preference Optimization} (DPO)~\cite{rafailov2023dpo} learns directly from triples $(x, y_w, y_l)$ where $y_w$ is the preferred and $y_l$ the rejected response, with a frozen reference model $\pi_{\mathrm{ref}}$:
 \begin{equation}
@@ -51,4 +51,4 @@ where $\sigma$ is the logistic function and $\beta$ controls how far $\pi_\theta
 \subsection{Local deployment and access levels}
 \label{sec:llm-local}
 
-\note{Contrast the two ways a model is served locally and what each exposes: (i) quantized inference servers (Ollama, LM Studio) return generated text and at most sampled log-probabilities; (ii) full/half-precision models in HuggingFace Transformers + PyTorch expose logits and gradients with respect to the input. This is the basis of the access levels in Table~\ref{tab:access}.}
+Locally deployed models are typically served in one of two ways, which differ in what they expose. (i) \emph{Quantized inference servers} such as Ollama or LM Studio run compressed (e.g.\ 4-bit) weights behind an HTTP API; they return the generated text and, at most, the log-probabilities of the sampled tokens. (ii) Full- or half-precision models loaded in a research framework such as HuggingFace Transformers on top of PyTorch expose the complete logit vector at every step and, through automatic differentiation, gradients of any loss with respect to the input. The second setting allows much stronger attacks than the first, and this difference is the basis of the attacker access levels in Table~\ref{tab:access}.

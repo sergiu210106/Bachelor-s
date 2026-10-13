@@ -22,7 +22,9 @@ let $\ctx(\delta)$ be the copilot's context with payload $\delta$ inserted into 
 where $D(\delta) \ge 0$ is an optional detectability penalty and $\lambda \ge 0$ its weight.
 \end{Definition}
 
-\note{Explain why the search space is discrete and enormous ($|\Sigma_f|^{L_f}$), why $L_f$ is the main difficulty knob (a 200-character User-Agent vs.\ a 32-character username), and why a \emph{continuous} fitness (log-probability of $y^{*}$) is far more informative than a binary success flag: two failing payloads are not equally close to success.}
+The search space is discrete and enormous: it contains up to $|\Sigma_f|^{L_f}$ strings, about $95^{200}$ for a 200-character User-Agent restricted to printable ASCII. Exhaustive search is impossible, and because strings are discrete, the gradient methods of continuous optimization cannot be applied directly. The field length $L_f$ is the main difficulty parameter: a 200-character User-Agent leaves room for a full natural-language instruction, whereas a 32-character username leaves room for only a few words, so the attacker must find unusually effective short strings.
+
+Using the log-probability of $y^{*}$ as fitness, rather than a binary success flag, is essential. Most candidate payloads fail, and a binary flag gives every failure the same score, providing no direction for the search. A continuous fitness distinguishes a payload that raises $p_\theta(\texttt{BENIGN})$ from $0.01$ to $0.4$ from one that leaves it unchanged, even though both still fail.
 
 \subsection{Gradient-guided search (GCG)}
 \label{sec:opt-gcg}
@@ -34,7 +36,7 @@ Greedy Coordinate Gradient~\cite{zou2023gcg} operates on the token sequence of t
 \end{equation}
 At every iteration a batch of single-token substitutions is sampled from the sets $\mathcal{X}_i$, each candidate is evaluated exactly, and the best one is kept.
 
-\note{Discuss the limits in this setting: needs gradients (white-box); usually needs many adversarial tokens, which short fields do not allow; substituted tokens must decode to characters in $\Sigma_f$, so candidates have to be filtered.}
+GCG has three limitations in the log setting. First, it requires gradients, i.e.\ white-box access. Second, it typically optimizes a suffix of tens of tokens, which a short field such as a username cannot hold. Third, the substituted tokens must decode to characters in $\Sigma_f$ (\S\ref{sec:llm-ar}), so candidate sets $\mathcal{X}_i$ must be filtered, which reduces the effective search space and can slow convergence.
 
 \subsection{Evolutionary search (genetic algorithm)}
 \label{sec:opt-ga}
@@ -62,14 +64,14 @@ A genetic algorithm (GA)~\cite{holland1992adaptation} needs only the fitness val
 \end{algorithmic}
 \end{algorithm}
 
-\note{Define the operators on strings: character/token/word-level mutation (insert, delete, substitute), one-point crossover, and the repair step (truncate to $L_f$, drop or map characters outside $\Sigma_f$). One sentence on why particle swarm optimization (PSO) is a poor fit: it is defined over continuous spaces and needs a non-trivial discrete adaptation.}
+The operators act directly on strings. \emph{Mutation} inserts, deletes, or substitutes a unit of the payload, where the unit can be a character, a token, or a whole word (word-level mutation preserves readability). \emph{One-point crossover} cuts both parents at a random position and joins the prefix of one with the suffix of the other. Since both operators can produce invalid strings, a \emph{repair} step truncates the child to $L_f$ and removes or maps characters outside $\Sigma_f$, so that every individual stays in $\adm(f)$. Other population-based methods are less suitable: particle swarm optimization (PSO), for example, is defined over continuous vector spaces and requires a non-trivial discrete adaptation to operate on strings.
 
 \subsection{LLM-driven iterative refinement (PAIR)}
 \label{sec:opt-pair}
 
 PAIR~\cite{chao2025pair} uses a second \emph{attacker LLM} that proposes a payload, observes the target's response, and rewrites the payload in light of the failure, repeating until success or a query budget is exhausted. It requires only black-box access.
 
-\note{Frame PAIR as search in which the ``gradient'' is natural-language feedback; it produces fluent, human-readable payloads (harder to filter by perplexity) but has no direct way to respect hard length constraints except by prompting and rejection.}
+PAIR can be viewed as a search method in which the role of the gradient is played by natural-language feedback: instead of a numerical direction, the attacker LLM receives the target's response and reasons about how to change the payload. Its payloads are therefore fluent, human-readable sentences, which are harder to filter than the unusual token sequences produced by GCG (whose high perplexity can be detected). In return, PAIR has no direct mechanism for respecting hard constraints: the length limit and character set can only be requested in the attacker's prompt, and violating candidates must be rejected or repaired afterwards.
 
 \subsection{Transferability}
 \label{sec:opt-transfer}

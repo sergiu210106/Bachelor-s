@@ -2,7 +2,7 @@
 \label{sec:threat}
 
 \subsection{SOCs, SIEMs and triage}
-\note{Define SOC, SIEM (collects and correlates logs, raises alerts) and triage (deciding whether an alert is a real threat). Place the LLM copilot in this workflow: it reads the alert and the underlying log records and produces one of the three outputs from \S\ref{sec:pi}.}
+A \emph{security operations center} (SOC) is the team responsible for monitoring an organization's systems and responding to attacks. Its central tool is a \emph{security information and event management} (SIEM) system, which collects logs from hosts and network devices, correlates them, and raises \emph{alerts} when rules or anomaly detectors fire. \emph{Triage} is the process of deciding, for each alert, whether it is a real threat that requires action or a false positive. Because SIEMs produce far more alerts than analysts can inspect, triage is the step where an LLM copilot is inserted: it receives the alert together with the underlying log records and produces one of the three outputs of \S\ref{sec:pi} (a label, a summary, or a recommended action), which the analyst then relies on.
 
 \subsection{Log substrates and attacker-controlled fields}
 
@@ -26,7 +26,9 @@ SSH \texttt{auth.log} & attempted username, client banner & short, restricted ch
 \end{tabular}
 \end{table}
 
-\note{Briefly explain each source: what generates the record, which fields come from the attacker, and how encoding (URL-encoding, hex-encoding of argv by auditd) changes what the model actually sees.}
+\emph{Web access logs} are written by nginx or Apache for every HTTP request. The User-Agent, referer, URI and query string are copied from the request, so any remote client controls them; the User-Agent is long and accepts almost any printable character, which makes it the most permissive field. Characters in the URI, however, are usually URL-encoded (a space becomes \texttt{\%20}), so the model sees an encoded payload unless the pipeline decodes it.
+\emph{Linux audit logs} (\texttt{auditd}) record every executed program in \texttt{execve} events, including its command-line arguments. An attacker who can run a command (e.g.\ through a web shell) controls these arguments, but \texttt{auditd} hex-encodes any argument containing spaces or special characters, so a readable payload may reach the model as a hexadecimal string.
+\emph{SSH authentication logs} (\texttt{auth.log}) record failed login attempts, including the attempted username and the client's version banner. These are available to an unauthenticated remote attacker, but usernames are short and restricted in character set, which makes them the hardest substrate to exploit.
 
 \subsection{Threat models}
 
@@ -55,4 +57,4 @@ Black-box & generated text only & LLM-driven refinement (PAIR) \\
 \end{tabular}
 \end{table}
 
-\note{Explain why white-box access is a reasonable \emph{research} assumption for open-weight local models (anyone can download them), while the realistic deployed attacker is black-box; this motivates measuring transferability (\S\ref{sec:opt-transfer}).}
+For open-weight models, white-box access is a reasonable \emph{research} assumption: anyone can download the same weights the defender runs, and white-box attacks give an upper bound on what an attacker can achieve. A realistic attacker facing a deployed copilot, however, is black-box: they do not know which model is used and cannot even observe its outputs directly, only their consequences (e.g.\ whether the attack was flagged). The gap between the two settings is bridged by \emph{transferability} (\S\ref{sec:opt-transfer}): whether payloads optimized against one model also succeed against another.

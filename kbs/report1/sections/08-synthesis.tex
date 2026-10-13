@@ -21,7 +21,7 @@ Fig.~\ref{fig:pipeline} combines the concepts of this report into the system stu
 \draw[arr] (det) -- (llm);
 \draw[arr] (llm) -- (out);
 \draw[arr] (out) -- (eval);
-\draw[arr, dashed] (out.south) to[bend left=25] node[below, font=\tiny]{feedback $F(\delta)$} (att.south);
+\draw[arr, dashed] (out.south) -- ++(0,-5mm) -| node[pos=0.25, below, font=\tiny]{feedback $F(\delta)$} (att.south);
 \end{tikzpicture}
 \caption{The concepts of this report combined: payload optimization, the copilot pipeline with its defense points, and evaluation.}
 \label{fig:pipeline}
@@ -35,4 +35,6 @@ The thesis uses these concepts to address four research questions:
 \item \textbf{RQ4}: how do trained defenses and detectors compare to inference-time defenses, and at what utility cost (\S\ref{sec:def}, \S\ref{sec:eval})?
 \end{itemize}
 
-\note{Close with 2--3 sentences of conclusion: what the reader should now understand, and that the related literature is surveyed in the second report (SLR).}
+\section{Conclusion}
+
+LLM copilots receive instructions and data in a single token stream, and in security operations part of that data is written by the attacker. This report presented the concepts needed to study the resulting threat: why aligned models follow injected text, how log-substrate injection and its threat model are defined, how effective payloads can be found by constrained optimization, which defenses exist, and how attacks and defenses are evaluated with sound statistics. The related literature on these attacks and defenses will be surveyed systematically in the second report.

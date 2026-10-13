@@ -5,7 +5,7 @@ Security operations centers (SOCs) face high alert volumes and a shortage of ski
 
 These systems share a structural weakness: an LLM receives its instructions and the data it must analyze as a single stream of text, and many log fields (the HTTP User-Agent, the request URI, command-line arguments, attempted usernames) are written by the attacker whose activity is being recorded. A crafted log entry can therefore carry instructions that hijack the model reading it~\cite{greshake2023indirect,pandey2026watchtower}.
 
-\note{Introduce the running example here: the nginx log line from Fig.~\ref{fig:running-example}, first clean, then with the payload in the User-Agent. Reuse it in every section.}
+Fig.~\ref{fig:running-example} shows the running example used throughout this report. An attacker probes a web application for SQL injection, and the nginx server records the request in its access log. Without the red text, the entry is an ordinary, clearly malicious probe: the query string contains \texttt{' OR 1=1--}, and a copilot asked to triage it should label it malicious. However, the User-Agent header is chosen freely by the client, so the attacker appends a sentence addressed not to the web server but to the LLM that will later read the log. If the copilot follows that sentence and labels the request benign, the attack has been hidden by the very system meant to detect it.
 
 \begin{figure}[t]
 \centering

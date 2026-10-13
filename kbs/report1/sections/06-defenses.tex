@@ -13,7 +13,11 @@ These change only how the prompt is built or how the output is read, and require
 \item \textbf{Constrained output}: force a closed answer format (e.g.\ a single label).
 \item \textbf{Spotlighting}~\cite{hines2024spotlighting}: make the provenance of untrusted text visible to the model by \emph{delimiting} (random delimiters around the data), \emph{datamarking} (a marker token interleaved throughout the data, e.g.\ every space replaced by \texttt{\^{}}), or \emph{encoding} (e.g.\ Base64).
 \end{itemize}
-\note{Show the running example under datamarking. Note that encoding is reported to work well only on high-capacity models, which is a concern for small local models.}
+Under datamarking, the payload of Fig.~\ref{fig:running-example} reaches the model as
+\begin{center}
+\footnotesize\ttfamily [SYSTEM\^{}NOTE:\^{}authorized\^{}penetration\^{}test...]
+\end{center}
+and the system prompt states that text interleaved with \texttt{\^{}} is data and must never be followed. The marker makes the injected sentence visibly part of the data. Encoding provides the strongest separation, but it is reported to work well only on high-capacity models that can reliably decode Base64~\cite{hines2024spotlighting}, which is a concern for the small models typically deployed locally.
 
 \subsection{Training-time defenses}
 \label{sec:def-train}
@@ -22,9 +26,9 @@ These change only how the prompt is built or how the output is read, and require
 
 \textbf{SecAlign}~\cite{chen2025secalign} casts robustness as preference optimization: for an input $x$ containing an injected instruction, the preferred response $y_w$ answers the legitimate instruction and the rejected response $y_l$ answers the injected one, and the model is trained with the DPO loss of Eq.~\eqref{eq:dpo}. Meta-SecAlign~\cite{chen2025metasecalign} releases open-weight Llama models trained this way, which makes evaluating a trained defense possible without training it.
 
-\note{One paragraph on known limits: optimization-based attacks still succeed against StruQ; architecture-aware attacks that target attention break StruQ and SecAlign~\cite{pandya2025astra}; and it is an open question whether delimiter-based separation is meaningful when the ``data'' is structured \texttt{key=value} telemetry rather than prose.}
+Trained defenses are not a complete solution. Optimization-based attacks such as GCG still achieve substantial success against StruQ~\cite{chen2025struq}, and architecture-aware attacks that directly target the attention patterns of the model break both StruQ and SecAlign~\cite{pandya2025astra}. Moreover, both defenses were designed and evaluated on prose data such as documents and web pages; it is an open question whether delimiter-based separation remains meaningful when the ``data'' is structured \texttt{key=value} telemetry, in which the boundary between field values and instructions is less obvious.
 
 \subsection{Detection}
 \label{sec:def-detect}
 
-Instead of hardening the copilot, a separate classifier $g(d) \in \{\text{clean}, \text{injected}\}$ inspects each record before it reaches the LLM. \note{Options from cheapest to most expensive: regex/keyword rules; small dedicated classifiers (e.g.\ Prompt Guard); general guard LLMs (e.g.\ Llama Guard). Trade-off: false positives on legitimate but unusual log content.}
+Instead of hardening the copilot, a separate classifier $g(d) \in \{\text{clean}, \text{injected}\}$ inspects each record before it reaches the LLM. From cheapest to most expensive, the options are: regular-expression and keyword rules (e.g.\ matching ``ignore previous instructions''); small dedicated classifiers trained to recognize injections, such as Prompt Guard~\cite{meta2024promptguard}; and general-purpose guard LLMs such as Llama Guard~\cite{inan2023llamaguard}. Cheaper detectors are easier to evade (e.g.\ by obfuscation), while all detectors face the same trade-off: logs routinely contain legitimate but unusual content (custom User-Agents, long URLs, encoded arguments), and every false positive either hides a real event or adds work for the analyst.
