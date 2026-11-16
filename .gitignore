@@ -31,4 +31,4 @@ models/
 *.local
 
 # claude
-.claude/
+.claude/settings.local.json
