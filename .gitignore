@@ -18,7 +18,6 @@ env/
 # Leading slash anchors to the repo root so we DON'T ignore the source package logsub/data/.
 /data/
 /runs/
-results/
 *.jsonl
 
 # Models / large weights — never commit
