@@ -220,6 +220,9 @@ def res_to_row(res, **extra):
                 substrate=c.substrate.value, field=c.target_field,
                 defenses="+".join(c.defenses) or "none",
                 asr=res.asr.point, asr_lo=res.asr.lo, asr_hi=res.asr.hi,
+                feasibility=res.feasibility.point, feas_lo=res.feasibility.lo,
+                feas_hi=res.feasibility.hi, asr_feasible=res.asr_feasible.point,
+                asr_f_lo=res.asr_feasible.lo, asr_f_hi=res.asr_feasible.hi,
                 utility=res.utility.point, util_lo=res.utility.lo, util_hi=res.utility.hi,
                 n=res.asr.n, **extra)
 
@@ -423,7 +426,9 @@ def eval_payloads_on(backend, payloads):
     cop = make_copilot(backend)
     recs = generate(Substrate.NGINX_ACCESS, len(payloads), malicious_ratio=1.0, seed=7); s = 0
     for rec, txt in zip(recs, payloads):
-        trial = inject(rec, FIELD, txt or "", attack_class=AC, arm=AttackArm.PAIR, mode="append", enforce=False)
+        if not txt:
+            continue  # infeasible payload: counts as a failure, model not queried
+        trial = inject(rec, FIELD, txt, attack_class=AC, arm=AttackArm.PAIR, mode="append", enforce=False)
         if grade(trial, cop.run(trial, TASK), TASK) is Outcome.ATTACK_SUCCESS: s += 1
     return clopper_pearson(s, len(recs))
 

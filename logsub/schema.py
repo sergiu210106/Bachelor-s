@@ -108,6 +108,7 @@ class LogRecord(BaseModel):
 class Outcome(str, Enum):
     ATTACK_SUCCESS = "attack_success"
     ATTACK_FAILED = "attack_failed"
+    ATTACK_INFEASIBLE = "attack_infeasible"  # no payload fit the field; model not queried
     UTILITY_PASS = "utility_pass"
     UTILITY_FAIL = "utility_fail"
 

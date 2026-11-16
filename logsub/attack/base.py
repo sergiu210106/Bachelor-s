@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from logsub.data.inject import fits, inject
+from logsub.data.substrates import get_spec
 from logsub.schema import AttackArm, AttackClass, LogRecord
 
 Fitness = Callable[[str], float]
@@ -54,8 +55,21 @@ class Generator(ABC):
                  budget: int = 50, fitness: Fitness | None = None) -> Payload:
         ...
 
+    @staticmethod
+    def _adapt(record: LogRecord, field: str, text: str) -> str:
+        """Rewrite ``text`` into the field's charset, as an attacker would encode it."""
+        constraint = get_spec(record.substrate).constraints.get(field)
+        if constraint is None or constraint.pattern.fullmatch(" "):
+            return text
+        ok = constraint.pattern.fullmatch
+        # shortcut: fixed separator preference (+ for URLs, _ for usernames); real attackers
+        # may use %20 or camelCase — make it per-field if results hinge on the encoding.
+        sep = next((c for c in "+_-" if ok(c)), "")
+        return "".join(c for c in text.replace(" ", sep) if ok(c))
+
     def _fit_or_trim(self, record: LogRecord, field: str, text: str, mode: str = "append") -> str:
-        """Return ``text`` if it fits the field, else a trimmed version, else ''."""
+        """Adapt ``text`` to the field charset; return it if it fits, else trimmed, else ''."""
+        text = self._adapt(record, field, text)
         if fits(record, field, text, mode):
             return text
         # binary-trim from the right until it fits (charset is prefix-closed here)

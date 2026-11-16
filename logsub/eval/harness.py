@@ -57,14 +57,18 @@ class ExperimentResult:
     config: ExperimentConfig
     asr: Rate
     utility: Rate
+    feasibility: Rate
+    asr_feasible: Rate
     rows: list[ResultRow] = field(default_factory=list)
 
     def summary(self) -> str:
         return (
             f"[{self.config.attack_arm}/{self.config.attack_class.value}/"
             f"{self.config.task.value}] defenses={list(self.config.defenses) or 'none'}\n"
-            f"  ASR     = {self.asr}\n"
-            f"  utility = {self.utility}"
+            f"  ASR          = {self.asr}\n"
+            f"  feasibility  = {self.feasibility}\n"
+            f"  ASR|feasible = {self.asr_feasible}\n"
+            f"  utility      = {self.utility}"
         )
 
 
@@ -91,25 +95,32 @@ def run_experiment(cfg: ExperimentConfig, copilot: Copilot, generator,
     attack_records = generate(
         cfg.substrate, cfg.n_attack, malicious_ratio=1.0, seed=cfg.seed
     )
-    successes = 0
+    successes = feasible = 0
     for rec in attack_records:
         fit = fitness_factory(rec) if fitness_factory is not None else None
         payload = generator.generate(
             rec, cfg.target_field, attack_class=cfg.attack_class,
             budget=getattr(cfg, "budget", 50), fitness=fit,
         )
-        injected = payload.apply(rec)
-        decision = copilot.run(injected, cfg.task)
-        outcome = grade(injected, decision, cfg.task)
+        if payload.infeasible:
+            # nothing was placed, so a model miss here is not the attacker's success
+            outcome, raw = Outcome.ATTACK_INFEASIBLE, ""
+        else:
+            feasible += 1
+            injected = payload.apply(rec)
+            decision = copilot.run(injected, cfg.task)
+            outcome, raw = grade(injected, decision, cfg.task), decision.raw
         if outcome is Outcome.ATTACK_SUCCESS:
             successes += 1
         rows.append(ResultRow(
             config_hash=chash, model=cfg.model, backend=cfg.backend, task=cfg.task,
             defense_pipeline=list(cfg.defenses), outcome=outcome,
-            budget_queries=payload.budget_used, seed=cfg.seed, raw_response=decision.raw,
+            budget_queries=payload.budget_used, seed=cfg.seed, raw_response=raw,
         ))
         _tick()
     asr = clopper_pearson(successes, len(attack_records))
+    feasibility = clopper_pearson(feasible, len(attack_records))
+    asr_feasible = clopper_pearson(successes, feasible)
 
     # --- utility pass: clean records, graded for task performance -----------
     util_records = generate(
@@ -129,4 +140,5 @@ def run_experiment(cfg: ExperimentConfig, copilot: Copilot, generator,
         _tick()
     utility = clopper_pearson(passes, len(util_records))
 
-    return ExperimentResult(config=cfg, asr=asr, utility=utility, rows=rows)
+    return ExperimentResult(config=cfg, asr=asr, utility=utility, feasibility=feasibility,
+                            asr_feasible=asr_feasible, rows=rows)

@@ -22,7 +22,7 @@ class HandwrittenGenerator(Generator):
         tried = 0
         for tmpl in templates_for(attack_class):
             tried += 1
-            candidate = " " + tmpl  # append after existing field content
+            candidate = self._adapt(record, field, " " + tmpl)  # append after existing content
             if fits(record, field, candidate, mode="append"):
                 return Payload(text=candidate, field=field, attack_class=attack_class,
                                arm=self.arm, budget_used=tried)
