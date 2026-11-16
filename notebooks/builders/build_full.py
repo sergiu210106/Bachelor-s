@@ -221,10 +221,12 @@ def res_to_row(res, **extra):
                 defenses="+".join(c.defenses) or "none",
                 asr=res.asr.point, asr_lo=res.asr.lo, asr_hi=res.asr.hi,
                 feasibility=res.feasibility.point, feas_lo=res.feasibility.lo,
-                feas_hi=res.feasibility.hi, asr_feasible=res.asr_feasible.point,
+                feas_hi=res.feasibility.hi,
+                # n=0 feasible trials: no data, not 0% success
+                asr_feasible=res.asr_feasible.point if res.asr_feasible.n else float("nan"),
                 asr_f_lo=res.asr_feasible.lo, asr_f_hi=res.asr_feasible.hi,
                 utility=res.utility.point, util_lo=res.utility.lo, util_hi=res.utility.hi,
-                n=res.asr.n, **extra)
+                n=res.asr.n, n_feasible=res.asr_feasible.n, **extra)
 
 def savefig(name):
     p = os.path.join(RESULTS_DIR, name); plt.savefig(p, dpi=120, bbox_inches="tight"); print("figure ->", p)
@@ -406,6 +408,9 @@ for substrate, field in REGIMES:
 dfC = pd.DataFrame(rowsC); save(dfC, "expC_constraint_regime.csv")
 plot_asr(dfC, x="regime", hue="arm", title="RQ2/H2: ASR by field-constraint regime and arm",
          fname="expC_regimes.png")
+plot_asr(dfC, x="regime", hue="arm", value="feasibility", lo="feas_lo", hi="feas_hi",
+         ylabel="feasibility", title="RQ2/H2: payload feasibility by regime and arm",
+         fname="expC_feasibility.png")
 """)
 
 md("## Experiment D · Transferability (RQ3)")

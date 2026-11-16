@@ -161,9 +161,11 @@ def res_to_row(res):
         substrate=c.substrate.value, field=c.target_field, defenses="+".join(c.defenses) or "none",
         asr=res.asr.point, asr_lo=res.asr.lo, asr_hi=res.asr.hi,
         feasibility=res.feasibility.point, feas_lo=res.feasibility.lo, feas_hi=res.feasibility.hi,
-        asr_feasible=res.asr_feasible.point, asr_f_lo=res.asr_feasible.lo,
-        asr_f_hi=res.asr_feasible.hi,
-        utility=res.utility.point, util_lo=res.utility.lo, util_hi=res.utility.hi, n=res.asr.n)
+        # n=0 feasible trials: no data, not 0% success
+        asr_feasible=res.asr_feasible.point if res.asr_feasible.n else float("nan"),
+        asr_f_lo=res.asr_feasible.lo, asr_f_hi=res.asr_feasible.hi,
+        utility=res.utility.point, util_lo=res.utility.lo, util_hi=res.utility.hi,
+        n=res.asr.n, n_feasible=res.asr_feasible.n)
 
 def plot_asr(df, x, hue=None, value="asr", lo="asr_lo", hi="asr_hi", title="", ylabel="ASR"):
     fig, ax = plt.subplots(figsize=(9, 4.5))
@@ -324,7 +326,7 @@ for substrate, field in REGIMES:
         rowsC.append(row)
         print(f"{row['regime']:28s} {arm:11s} ASR={res.asr}")
 dfC = pd.DataFrame(rowsC)
-dfC[["regime", "arm", "asr", "asr_lo", "asr_hi"]]
+dfC[["regime", "arm", "asr", "asr_lo", "asr_hi", "feasibility", "asr_feasible", "n_feasible"]]
 """)
 
 code(r"""
@@ -348,6 +350,8 @@ if HF_GREYBOX:
     dfC = pd.DataFrame(rowsC)
 save(dfC, "expC_constraint_regime.csv")
 plot_asr(dfC, x="regime", hue="arm", title="RQ2/H2: ASR by field-constraint regime and arm")
+plot_asr(dfC, x="regime", hue="arm", value="feasibility", lo="feas_lo", hi="feas_hi",
+         ylabel="feasibility", title="RQ2/H2: payload feasibility by regime and arm")
 """)
 
 md("""
