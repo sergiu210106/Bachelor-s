@@ -191,9 +191,10 @@ handwritten and GCG arms ignore it (GCG carries its own gradient objective).
 - **`grading.py`** decides per task whether a trial was an attack trial (injection + malicious
   ground truth) or a utility trial (clean record), then maps to an `Outcome`.
 - **`harness.py`** — `ExperimentConfig.hash()` is the provenance key; `run_experiment(cfg, copilot,
-  generator, fitness_factory=None)` runs the attack and utility passes and returns an
+  generator, fitness_factory=None, progress=None)` runs the attack and utility passes and returns an
   `ExperimentResult` with ASR, utility, and all rows. `fitness_factory` threads a per-record fitness
-  into the adaptive arms (see §3).
+  into the adaptive arms (see §3); `progress` is a per-record callback (e.g. `tqdm.update`) so slow
+  GPU cells in the Colab notebook show a live bar.
 
 ---
 

@@ -67,7 +67,7 @@ code(r"""
 # Clone the PUBLIC repo and install it (editable) with the GPU extras.
 # Re-runnable: clones fresh, pulls if already cloned, or no-ops if already inside the repo.
 import os
-REPO_URL = "https://github.com/<your-username>/<your-repo>.git"   # <-- set this
+REPO_URL = "https://github.com/sergiu210106/Bachelor-s.git"
 
 if os.path.exists("logsub"):
     pass                       # already inside the repo
@@ -86,6 +86,7 @@ code(r"""
 # Imports + offline MockBackend smoke test (proves the pipeline before any model loads).
 import itertools, math
 import numpy as np, pandas as pd, matplotlib.pyplot as plt
+from tqdm.auto import tqdm
 
 from logsub.copilot.backends import MockBackend, OllamaBackend, HFBackend
 from logsub.copilot.copilot import Copilot
@@ -110,14 +111,21 @@ print("smoke ASR:", _s.asr, "| utility:", _s.utility)
 """)
 
 code(r"""
-# Persist result tables (Drive if available, else ./results).
+# Mount Drive and route the HuggingFace cache + results there, so the big Qwen download
+# (~15 GB) and result tables PERSIST across sessions. Run this BEFORE loading any model.
 RESULTS_DIR = "results"
 try:
     from google.colab import drive
     drive.mount("/content/drive")
+    base = "/content/drive/MyDrive/logsub-cache"
+    os.makedirs(base + "/hf", exist_ok=True)
+    os.environ["HF_HOME"] = base + "/hf"          # HF models cached to Drive (download once)
+    # Optional (Drive FUSE can be flaky for Ollama's blob store; re-pulling is fast & reliable):
+    # os.environ["OLLAMA_MODELS"] = base + "/ollama"   # must be set BEFORE 'ollama serve'
     RESULTS_DIR = "/content/drive/MyDrive/logsub-runs"
+    print("HF cache ->", os.environ["HF_HOME"])
 except Exception as e:
-    print("Drive not mounted (", e, ")")
+    print("Drive not mounted (", e, ") — caches/results are ephemeral this session")
 os.makedirs(RESULTS_DIR, exist_ok=True)
 print("results ->", RESULTS_DIR)
 """)
@@ -173,7 +181,8 @@ os.environ["OLLAMA_HOST"] = "http://localhost:11434"
 """)
 
 code(r"""
-MODELS = ["llama3.2:3b", "llama3.1:8b"]   # black-box cross-model set; add qwen2.5:7b etc.
+# Cross-family black-box set: two sizes + a different family makes RQ1/RQ3 meaningful.
+MODELS = ["llama3.2:3b", "llama3.1:8b", "qwen2.5:7b"]
 for m in MODELS:
     print("pulling", m, "...")
     !ollama pull {m}
@@ -193,13 +202,17 @@ def make_copilot(backend, defenses=()):
 
 def run_cell(backend, *, substrate=Substrate.NGINX_ACCESS, task=Task.CLASSIFY,
              attack_class=AttackClass.PERSONA_HIJACK, arm="handwritten", field="user_agent",
-             defenses=(), n=60, seed=0, fitness_factory=None, generator=None):
+             defenses=(), n=60, seed=0, fitness_factory=None, generator=None, desc=None):
     cfg = ExperimentConfig(
         model=getattr(backend, "name", "?"), backend=backend.kind, substrate=substrate, task=task,
         attack_class=attack_class, attack_arm=arm, target_field=field,
         defenses=tuple(defenses), n_attack=n, n_utility=n, seed=seed)
     gen = generator if generator is not None else GEN[arm]()
-    return run_experiment(cfg, make_copilot(backend, defenses), gen, fitness_factory=fitness_factory)
+    bar = tqdm(total=2 * n, desc=desc or f"{arm}:{field}:{task.value}", leave=False)
+    res = run_experiment(cfg, make_copilot(backend, defenses), gen,
+                         fitness_factory=fitness_factory, progress=bar.update)
+    bar.close()
+    return res
 
 def res_to_row(res, **extra):
     c = res.config
@@ -210,7 +223,10 @@ def res_to_row(res, **extra):
                 utility=res.utility.point, util_lo=res.utility.lo, util_hi=res.utility.hi,
                 n=res.asr.n, **extra)
 
-def plot_asr(df, x, hue=None, value="asr", lo="asr_lo", hi="asr_hi", title="", ylabel="ASR"):
+def savefig(name):
+    p = os.path.join(RESULTS_DIR, name); plt.savefig(p, dpi=120, bbox_inches="tight"); print("figure ->", p)
+
+def plot_asr(df, x, hue=None, value="asr", lo="asr_lo", hi="asr_hi", title="", ylabel="ASR", fname=None):
     fig, ax = plt.subplots(figsize=(9, 4.5))
     groups = df[hue].unique() if hue else [None]
     xs = list(df[x].unique()); w = 0.8 / len(groups)
@@ -222,33 +238,58 @@ def plot_asr(df, x, hue=None, value="asr", lo="asr_lo", hi="asr_hi", title="", y
     ax.set_xticks(np.arange(len(xs)) + 0.4 - w / 2); ax.set_xticklabels(xs, rotation=20, ha="right")
     ax.set_ylim(0, 1.05); ax.set_ylabel(ylabel); ax.set_title(title)
     if hue: ax.legend(title=hue)
-    plt.tight_layout(); plt.show()
+    plt.tight_layout()
+    if fname: savefig(fname)
+    plt.show()
 
 def save(df, name):
     p = os.path.join(RESULTS_DIR, name); df.to_csv(p, index=False); print("saved", p)
 """)
 
-md("""
-## Experiment A · Cross-model susceptibility (RQ1)
-Handwritten payloads, no defense, roomy `user_agent` field, across models × classes × tasks.
-Screening pass — re-run interesting cells at n≈150 for tight CIs.
+md(r"""
+## Experiment scale (tune to your time budget)
+
+These knobs set sample sizes and optimizer budgets. The defaults keep the **full grid** (all attack
+classes, tasks, regimes, models) while staying runnable on a T4 — roughly **A ~40 min, B ~15 min,
+C ~60 min, D ~20 min**. Lower the `N_*` for a quick screening pass; raise them (e.g. 150) for the
+specific cells you want publication-tight CIs on. The grey-box GA cost scales with
+`N_C_GA × GA_POP × GA_GEN` GPU forward passes — that's the slow one.
 """)
 
 code(r"""
-SCREEN_N = 40
+N_A     = 40                 # Exp A: per (model × class × task)
+N_B     = 80                 # Exp B: per defense pipeline
+N_C_BB  = 30                 # Exp C: black-box arms (handwritten / PAIR)
+N_C_GA  = 15                 # Exp C: grey-box GA  (each record = GA_POP*GA_GEN forward passes)
+N_C_GCG = 10                 # Exp C: white-box GCG
+N_D     = 30                 # Exp D: payloads optimized per source model
+GA_POP, GA_GEN = 16, 8
+GCG_STEPS, GCG_TOPK, GCG_BATCH, GCG_NTOK = 60, 128, 32, 12
+
 CLASSES = [AttackClass.DIRECT_OVERRIDE, AttackClass.PERSONA_HIJACK,
            AttackClass.CONTEXT_MANIPULATION, AttackClass.OBFUSCATED]
 TASKS = [Task.CLASSIFY, Task.SUMMARIZE, Task.REMEDIATE]
+print("scale set; models:", MODELS)
+""")
 
+md("""
+## Experiment A · Cross-model susceptibility (RQ1)
+Handwritten payloads, no defense, roomy `user_agent` field, across **models × 4 attack classes × 3
+tasks**. Tests whether smaller/local models are more susceptible and whether the persona-hijack >
+direct-override ordering holds. Screening pass — re-run interesting cells at n≈150 for tight CIs.
+""")
+
+code(r"""
 rowsA = []
 for model in MODELS:
     b = OllamaBackend(model)
     for ac, task in itertools.product(CLASSES, TASKS):
-        res = run_cell(b, task=task, attack_class=ac, field="user_agent", n=SCREEN_N)
+        res = run_cell(b, task=task, attack_class=ac, field="user_agent", n=N_A,
+                       desc=f"A {model} {ac.value} {task.value}")
         rowsA.append(res_to_row(res)); print(f"{model:14s} {ac.value} {task.value:10s} {res.asr}")
 dfA = pd.DataFrame(rowsA); save(dfA, "expA_susceptibility.csv")
 plot_asr(dfA[dfA.task == "classify"], x="attack_class", hue="model",
-         title="RQ1: classification suppression ASR by attack class")
+         title="RQ1: classification suppression ASR by attack class", fname="expA_classify.png")
 dfA.groupby("task")[["asr"]].mean()
 """)
 
@@ -258,7 +299,7 @@ md(r"""
 Adds a commercial model as an RQ1 calibration point against the published gpt-4o-mini results. Runs
 only if `OPENAI_API_KEY` is set (Colab secret). Model/endpoint come from `REFERENCE_MODEL` /
 `OPENAI_BASE_URL` (default `gpt-4o-mini` on the OpenAI endpoint; any OpenAI-compatible endpoint works).
-**This calls a paid API** — `SCREEN_N × classes × tasks` requests.
+**This calls a paid API** — `N_A × classes × tasks` requests.
 """)
 
 code(r"""
@@ -269,11 +310,12 @@ else:
     # optionally override the model/endpoint here, e.g. os.environ["REFERENCE_MODEL"] = "gpt-4o-mini"
     ref = OpenAIBackend()
     for ac, task in itertools.product(CLASSES, TASKS):
-        res = run_cell(ref, task=task, attack_class=ac, field="user_agent", n=SCREEN_N)
+        res = run_cell(ref, task=task, attack_class=ac, field="user_agent", n=N_A,
+                       desc=f"A* {ref.name} {ac.value} {task.value}")
         rowsA.append(res_to_row(res)); print(f"{ref.name:14s} {ac.value} {task.value:10s} {res.asr}")
     dfA = pd.DataFrame(rowsA); save(dfA, "expA_susceptibility.csv")
     plot_asr(dfA[dfA.task == "classify"], x="attack_class", hue="model",
-             title="RQ1 incl. commercial reference")
+             title="RQ1 incl. commercial reference", fname="expA_classify_ref.png")
 """)
 
 md("## Experiment B · Defense efficacy & utility trade-off (RQ4)")
@@ -285,7 +327,8 @@ PIPELINES = [(), ("structured_prompting",), ("spotlight_delimit",), ("spotlight_
              ("spotlight_datamark", "sanitization")]
 b = OllamaBackend(DEF_MODEL); rowsB = []
 for defs in PIPELINES:
-    res = run_cell(b, attack_class=AttackClass.PERSONA_HIJACK, defenses=defs, n=80)
+    res = run_cell(b, attack_class=AttackClass.PERSONA_HIJACK, defenses=defs, n=N_B,
+                   desc=f"B {'+'.join(defs) or 'none'}")
     rowsB.append(res_to_row(res)); print(f"{('+'.join(defs) or 'none'):30s} ASR={res.asr} util={res.utility}")
 dfB = pd.DataFrame(rowsB); save(dfB, "expB_defenses.csv")
 
@@ -295,7 +338,7 @@ for _, r in dfB.iterrows():
     ax.annotate(r.defenses, (r.utility, 1 - r.asr), fontsize=8, xytext=(4, 4), textcoords="offset points")
 ax.set_xlabel("utility"); ax.set_ylabel("robustness (1 - ASR)")
 ax.set_title(f"RQ4 trade-off [{DEF_MODEL}]"); ax.set_xlim(0, 1.05); ax.set_ylim(0, 1.05); ax.grid(alpha=0.3)
-plt.tight_layout(); plt.show()
+plt.tight_layout(); savefig("expB_tradeoff.png"); plt.show()
 """)
 
 md(r"""
@@ -338,23 +381,28 @@ rowsC = []
 for substrate, field in REGIMES:
     for arm in ["handwritten", "pair"]:
         ff = pair_oracle_factory(ob, Task.CLASSIFY, field, AC) if arm == "pair" else None
-        res = run_cell(ob, substrate=substrate, field=field, arm=arm, attack_class=AC, n=30, fitness_factory=ff)
+        res = run_cell(ob, substrate=substrate, field=field, arm=arm, attack_class=AC,
+                       n=N_C_BB, fitness_factory=ff, desc=f"C {arm} {field}")
         rowsC.append(res_to_row(res, regime=f"{substrate.value}:{field}")); print(f"{field:12s} {arm:11s} {res.asr}")
 
-# grey-box GA (logit fitness), evaluated on the same grey model
+# grey-box GA (continuous logit fitness), evaluated on the same grey model
+ga = GAGenerator(pop_size=GA_POP, generations=GA_GEN, seed=0)
 for substrate, field in REGIMES:
     ff = logprob_fitness_factory(grey_hf, Task.CLASSIFY, field, AC)
-    res = run_cell(grey_hf, substrate=substrate, field=field, arm="ga", attack_class=AC, n=20, fitness_factory=ff)
+    res = run_cell(grey_hf, substrate=substrate, field=field, arm="ga", attack_class=AC,
+                   n=N_C_GA, fitness_factory=ff, generator=ga, desc=f"C ga(grey) {field}")
     rowsC.append(res_to_row(res, regime=f"{substrate.value}:{field}")); print(f"{field:12s} {'ga(grey)':11s} {res.asr}")
 
 # white-box GCG (gradients), evaluated on the small white-box model
 for substrate, field in REGIMES:
-    gen = GCGGenerator(gcg_hf, n_tokens=12, steps=80, top_k=128, batch=32)
-    res = run_cell(gcg_hf, substrate=substrate, field=field, arm="gcg", attack_class=AC, n=10, generator=gen)
+    gen = GCGGenerator(gcg_hf, n_tokens=GCG_NTOK, steps=GCG_STEPS, top_k=GCG_TOPK, batch=GCG_BATCH)
+    res = run_cell(gcg_hf, substrate=substrate, field=field, arm="gcg", attack_class=AC,
+                   n=N_C_GCG, generator=gen, desc=f"C gcg(white) {field}")
     rowsC.append(res_to_row(res, regime=f"{substrate.value}:{field}")); print(f"{field:12s} {'gcg(white)':11s} {res.asr}")
 
 dfC = pd.DataFrame(rowsC); save(dfC, "expC_constraint_regime.csv")
-plot_asr(dfC, x="regime", hue="arm", title="RQ2/H2: ASR by field-constraint regime and arm")
+plot_asr(dfC, x="regime", hue="arm", title="RQ2/H2: ASR by field-constraint regime and arm",
+         fname="expC_regimes.png")
 """)
 
 md("## Experiment D · Transferability (RQ3)")
@@ -362,11 +410,11 @@ md("## Experiment D · Transferability (RQ3)")
 code(r"""
 FIELD, TASK = "user_agent", Task.CLASSIFY
 
-def optimize_payloads(backend, arm="pair", n=30):
+def optimize_payloads(backend, arm="pair", n=N_D):
     cop = make_copilot(backend); gen = GEN[arm]()
     recs = generate(Substrate.NGINX_ACCESS, n, malicious_ratio=1.0, seed=0)
     out = []
-    for rec in recs:
+    for rec in tqdm(recs, desc=f"D optimize {backend.name}", leave=False):
         ff = make_record_oracle(cop, TASK, rec, FIELD, AC, AttackArm.PAIR) if arm == "pair" else None
         out.append(gen.generate(rec, FIELD, attack_class=AC, budget=50, fitness=ff).text)
     return out
@@ -379,7 +427,7 @@ def eval_payloads_on(backend, payloads):
         if grade(trial, cop.run(trial, TASK), TASK) is Outcome.ATTACK_SUCCESS: s += 1
     return clopper_pearson(s, len(recs))
 
-payloads_by_source = {m: optimize_payloads(OllamaBackend(m), "pair", 30) for m in MODELS}
+payloads_by_source = {m: optimize_payloads(OllamaBackend(m), "pair", N_D) for m in MODELS}
 Tm = pd.DataFrame(index=MODELS, columns=MODELS, dtype=float)
 for src in MODELS:
     for tgt in MODELS:
@@ -394,7 +442,7 @@ ax.set_xlabel("target"); ax.set_ylabel("source (optimized on)"); ax.set_title("R
 for i in range(len(MODELS)):
     for j in range(len(MODELS)):
         ax.text(j, i, f"{Tm.values[i, j]:.2f}", ha="center", va="center", color="w")
-fig.colorbar(im); plt.tight_layout(); plt.show(); Tm
+fig.colorbar(im); plt.tight_layout(); savefig("expD_transfer.png"); plt.show(); Tm
 """)
 
 md("## Experiment E · Detector baseline")

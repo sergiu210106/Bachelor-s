@@ -69,14 +69,21 @@ class ExperimentResult:
 
 
 def run_experiment(cfg: ExperimentConfig, copilot: Copilot, generator,
-                   fitness_factory=None) -> ExperimentResult:
+                   fitness_factory=None, progress=None) -> ExperimentResult:
     """Run one cell of the grid. ``generator`` is an S2 Generator instance.
 
     ``fitness_factory``, if given, is a ``LogRecord -> Fitness`` callable used to
     build a per-record fitness signal for the adaptive arms (e.g. a grey-box
     logprob fitness from HFBackend, or a black-box copilot oracle). When omitted
     the generator falls back to its own default (offline) fitness.
+
+    ``progress``, if given, is a no-arg callable invoked once per processed record
+    (both passes) — e.g. ``tqdm.update`` — so slow GPU cells show live progress.
     """
+    def _tick():
+        if progress is not None:
+            progress(1)
+
     chash = cfg.hash()
     rows: list[ResultRow] = []
 
@@ -101,6 +108,7 @@ def run_experiment(cfg: ExperimentConfig, copilot: Copilot, generator,
             defense_pipeline=list(cfg.defenses), outcome=outcome,
             budget_queries=payload.budget_used, seed=cfg.seed, raw_response=decision.raw,
         ))
+        _tick()
     asr = clopper_pearson(successes, len(attack_records))
 
     # --- utility pass: clean records, graded for task performance -----------
@@ -118,6 +126,7 @@ def run_experiment(cfg: ExperimentConfig, copilot: Copilot, generator,
             defense_pipeline=list(cfg.defenses), outcome=outcome, seed=cfg.seed,
             raw_response=decision.raw,
         ))
+        _tick()
     utility = clopper_pearson(passes, len(util_records))
 
     return ExperimentResult(config=cfg, asr=asr, utility=utility, rows=rows)
