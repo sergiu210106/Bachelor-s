@@ -2,6 +2,7 @@
 name: acceptance-test-writer
 description: Writes black-box pytest acceptance tests from OpenSpec scenarios into tests/acceptance/, without reading the implementation. Use at the start of the tdd skill, before any implementation code is written.
 tools: Read, Write, Edit, Bash
+model: sonnet
 hooks:
   PreToolUse:
     - matcher: "Read"
