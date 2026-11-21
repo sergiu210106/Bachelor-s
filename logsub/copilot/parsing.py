@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from logsub.schema import Label, Task
+
+_LABEL = re.compile(r"\b(NOT\s+|NON-)?(MALICIOUS|BENIGN)\b")
 
 
 @dataclass
@@ -19,12 +22,9 @@ class Decision:
 def parse(task: Task, raw: str) -> Decision:
     up = raw.upper()
     if task is Task.CLASSIFY:
-        label: Label | None = None
-        # check MALICIOUS first; "BENIGN" may also appear in stray text
-        if "MALICIOUS" in up:
-            label = Label.MALICIOUS
-        elif "BENIGN" in up:
-            label = Label.BENIGN
+        # shortcut: first un-negated label wins; a hedged lead ("looks benign, but MALICIOUS") and
+        # negations other than NOT/NON- ("isn't malicious") misparse. Revisit with the #4 audit.
+        label = next((Label[m[2]] for m in _LABEL.finditer(up) if not m[1]), None)
         return Decision(task=task, raw=raw, label=label)
     if task is Task.SUMMARIZE:
         return Decision(task=task, raw=raw, summary=raw.strip())
