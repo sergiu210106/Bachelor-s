@@ -10,6 +10,18 @@
   "enabledPlugins": {
     "ponytail@ponytail": true
   },
+  "permissions": {
+    "ask": ["Edit(./tests/acceptance/**)"]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/tdd-gate.sh\"" }
+        ]
+      }
+    ]
+  },
   "statusLine": {
     "type": "command",
     "command": "bash \"$HOME/.claude/ponytail-statusline.sh\""
